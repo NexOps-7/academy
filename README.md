@@ -4,10 +4,19 @@
     ```
     implicit conversion to enum 'enum{}$unit::operation_t' from 'logic'
     ```
-## fix: op_in_r is an operation, not bit
+## fix: op_in_r is an operation, not bit?
         ```
         op_in_r <= '0 -> op_in_r <= nop
         ``` 
+
+## makefile commands
+    ```
+    make clean
+    make waves
+
+    make sim
+    make waves
+    ```
 
 ## verilator commands
     ```
@@ -32,5 +41,6 @@
         `d dd 3dd d$`
         `P p`
 
-  ![alu](https://github.com/xTech-01/verilator_emulator/blob/main/gtkwave_add_sub_alu.png)
-  [Ref](https://itsembedded.com/dhd/verilator_1/)
+![rst](https://github.com/xTech-01/verilator_emulator/blob/main/rand_rst.png)
+![alu](https://github.com/xTech-01/verilator_emulator/blob/main/alu_2_states.png)
+[Ref](https://itsembedded.com/dhd/verilator_1/)

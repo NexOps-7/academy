@@ -55,6 +55,7 @@ module alu #(
 		end else begin
 			out	 <= result;
 			out_valid <= in_valid_r;
+			// out_valid <= 1'b1;// always be 1, should be in_valid_r
 		end
 	end
 endmodule;
