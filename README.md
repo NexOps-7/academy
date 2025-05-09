@@ -14,6 +14,7 @@
     make clean
     make waves
 
+    make clean
     make sim
     make waves
     ```
@@ -41,6 +42,8 @@
         `d dd 3dd d$`
         `P p`
 
+![rst](https://github.com/xTech-01/verilator_emulator/blob/main/rand_expected_dut.png)
 ![rst](https://github.com/xTech-01/verilator_emulator/blob/main/rand_rst.png)
 ![alu](https://github.com/xTech-01/verilator_emulator/blob/main/alu_2_states.png)
+
 [Ref](https://itsembedded.com/dhd/verilator_1/)

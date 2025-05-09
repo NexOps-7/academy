@@ -29,12 +29,12 @@ void dut_reset (Valu *dut, vluint64_t &sim_time){
 }
 
 void check_out_valid(Valu *dut, vluint64_t &sim_time){
-    static unsigned char in_valid = 0;
+    static unsigned char in_valid = 0; // current cycle
     static unsigned char in_valid_d = 0; //delayed
     static unsigned char out_valid_exp = 0; //expected
 
     if (sim_time >= VERIF_START_TIME) {
-		// out_valid <= in_valid_r;
+		// test: out_valid <= in_valid_r;
         out_valid_exp = in_valid_d;
         in_valid_d = in_valid;
         in_valid = dut->in_valid;
@@ -45,11 +45,26 @@ void check_out_valid(Valu *dut, vluint64_t &sim_time){
                 << " simtime: " << sim_time << std::endl;
         }
     }
+	// input reset posedge up input/output updates
+	// always_comb begin
+	//     in_valid = 0;
+	//     initial posedge_cnt <= '0;
+	// 	   always_ff @ (posedge clk, posedge rst) begin
+	// 	   posedge_cnt <= posedge_cnt + 1'b1;
+	// end
+
+	// dut->in_valid = 0
+	// posedge_cnt++;
+	//  if (posedge_cnt == 5) // 5th clock cyle cc
+	//      in_valid = 1;
+
+	//  if (posedge_cnt == 7)
+	//      assert (out_valid == 1) else $error("ERROR!")
 }
 
-void set_rnd_out_valid(Valu *dut, vluint64_t &sim_time){
+void set_rnd_in_out_valid(Valu *dut, vluint64_t &sim_time){
     if (sim_time >= VERIF_START_TIME) {
-        dut->in_valid = rand() % 2; // generate values 0 and 1
+        dut->in_valid = rand() % 2; // 0 and 1
     }
 }
 
@@ -69,17 +84,13 @@ int main(int argc, char** argv, char** env){
 		dut_reset(dut, sim_time);
 
 		dut->clk ^= 1; //invert OR ~clk
-	    dut->eval(); //posedge output updates input reset
-		// initial posedge_cnt <= '0;
-		// always_ff @ (posedge clk, posedge rst) begin
-		// 	posedge_cnt <= posedge_cnt + 1'b1;
-		// end
+	    dut->eval(); // evulate for tracing
+
 		if(dut->clk == 1){
-			dut->in_valid = 0;
-			posedge_cnt++;
-			set_rnd_out_valid(dut, sim_time);
+			set_rnd_in_out_valid(dut, sim_time);
 			check_out_valid(dut, sim_time);  
 		}
+
        	m_trace->dump(sim_time);
  		sim_time++;
 	}
