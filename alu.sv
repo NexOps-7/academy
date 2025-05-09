@@ -2,7 +2,7 @@ typedef enum logic [1:0] {
 	add = 2'h1,
 	sub = 2'h2,
 	nop = 2'h0
-} operation_t;
+} operation_t /*verilator public*/; //make it pubic in Valu___024unit.h
 
 module alu #(
 	parameter WIDTH = 6

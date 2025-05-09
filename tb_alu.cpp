@@ -9,9 +9,143 @@
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7 //after reset
 vluint64_t sim_time = 0;
-vluint64_t posedge_cnt = 0;
 
-void dut_reset (Valu *dut, vluint64_t &sim_time){
+
+// generate transaction items -> driver -> inp/out monitor -> scoreboard
+class AluInTx {
+	public:
+		uint32_t a;
+		uint32_t b;
+		enum Operation {
+			add = Valu___024unit::operation_t::add,
+			sub = Valu___024unit::operation_t::sub,
+			nop = Valu___024unit::operation_t::nop
+		} op;
+};
+
+class AluOutTx {
+	public:
+		uint32_t out;
+};
+
+class AluInDrv {
+	private:
+		Valu *dut;
+	public:
+		AluInDrv(Valu *dut) {
+			this->dut = dut;
+		}
+
+		void drive(AluInTx *tx) {
+			dut->in_valid = 0;
+			if (tx != NULL) {
+				if (tx->op != AluInTx::nop) { // drive to inp interface pins
+					// always_comb begin
+					//	dut.in_valid =1'b0;
+					//	if (tx item exists && tx item operation != NOP) begin
+					//		dut.in_valid = 1'b1;
+					//	end
+					// end
+					dut->in_valid = 1;
+					dut->op_in = tx->op;
+					dut->a_in = tx->a;
+					dut->b_in = tx->b;
+				}
+				delete tx;
+			}
+		}
+};
+
+class AluInMon {
+	private:
+		Valu *dut;
+		AluScb *scb;
+	public:
+		AluInMon(Valu *dut, AluScb *scb) {
+			this->dut = dut;
+			this->scb = scb;
+		}
+		
+		void monitor(){
+			if (dut->in_valid == 1) {
+				AluInTx *tx = new AluInTx();
+				tx->op = AluInTx::Operation(dut->op_in);
+				tx->a = dut->a_in;
+				tx->b = dut->b_in;
+
+				scb->writeIn(tx);
+			}
+		}
+};
+
+class AluOutMon {
+	private:
+		Valu *dut;
+		AluScb *scb;
+	public:
+		AluOutMon(Valu *dut, AluScb *scb) {
+			this->dut = dut;
+			this->scb = scb;
+		}
+
+		void monitor() {
+			if (dut->out_valid == 1) {
+				AluOutTx *tx = new AluOutTx();
+				tx->out = dut->out;
+
+				scb->writeOut(tx);
+			}
+		}
+}
+
+class AluScb {
+	private:
+		std::deque<AluInTx*> in_q;
+	public:
+		void writeIn(AluInTx *tx) {
+			in_q.push_back(tx);
+		}
+
+		void writeOut(AluOutTx *tx) {
+			if (in_q.empty()) {
+				std::cout << "Fatal error in AluScb: empty AluInTx queue" << std::endl;
+				exit(1);
+			}
+
+			AluInTx *in;
+			in = in_q.front();
+			in_q.pop_front();
+			switch (in->op) {
+				case AluInTx::nop:
+					std::cout << "Fatal error in Aluscb, received NOP on input" << std::en
+					exit(1);
+					break;
+				case AluInTx::add:
+					if (in->a + in->b != tx->out) {
+						std::cout << std::endl;
+						std::cout << "AluScb: add mismatch" << std::endl;
+						std::cout << " Expected: " << in->a + in->b
+								  << " Actual: " << tx->out << std::endl;
+						std::cout << " Simtime: " << sim_time << std::endl;
+					}
+					break;
+				case AluInTx::sub:
+					if (in->a - in->b != tx->out) {
+						std::cout << std::endl;
+						std::cout << "AluScb: sub mismatch" << std::endl;
+						std::cout << " Expected: " << in->a - in->b
+								  << " Actual: " << tx->out << std::endl;
+						std::cout << " Simtime: " << sim_time << std::endl;
+					}
+					break;
+			}
+			delete in;
+			delete tx;
+		}
+};
+
+
+void dut_reset(Valu *dut, vluint64_t &sim_time){
 	// always_comb begin
 	//     dut.rst = 1'b0;
 	//     if (sim_time >= 3 && sim_time < 6) begin
@@ -28,48 +162,20 @@ void dut_reset (Valu *dut, vluint64_t &sim_time){
 	}
 }
 
-void check_out_valid(Valu *dut, vluint64_t &sim_time){
-    static unsigned char in_valid = 0; // current cycle
-    static unsigned char in_valid_d = 0; //delayed
-    static unsigned char out_valid_exp = 0; //expected
-
-    if (sim_time >= VERIF_START_TIME) {
-		// test: out_valid <= in_valid_r;
-        out_valid_exp = in_valid_d;
-        in_valid_d = in_valid;
-        in_valid = dut->in_valid;
-        if (out_valid_exp != dut->out_valid) {
-            std::cout << "ERROR: out_valid mismatch, "
-                << "exp: " << (int)(out_valid_exp)
-                << " recv: " << (int)(dut->out_valid)
-                << " simtime: " << sim_time << std::endl;
-        }
-    }
-	// input reset posedge up input/output updates
-	// always_comb begin
-	//     in_valid = 0;
-	//     initial posedge_cnt <= '0;
-	// 	   always_ff @ (posedge clk, posedge rst) begin
-	// 	   posedge_cnt <= posedge_cnt + 1'b1;
-	// end
-
-	// dut->in_valid = 0
-	// posedge_cnt++;
-	//  if (posedge_cnt == 5) // 5th clock cyle cc
-	//      in_valid = 1;
-
-	//  if (posedge_cnt == 7)
-	//      assert (out_valid == 1) else $error("ERROR!")
+// transaction generator
+AluInTx* rndAluInTx() {
+	if (rand() % 5 == 0) { // 20% chance generating a transaction
+		AluInTx *tx = new AluInTx();
+		tx->op = AluInTx::Operation(ran() % 3) //0 1 2
+		tx->a = rand() % 11 + 10; // 10-20
+		tx->b = rand() % 6; //0-5
+		return tx;
+	} else {
+		return NULL; // not generating or state-based-opposite time-based sequence
+	}
 }
-
-void set_rnd_in_out_valid(Valu *dut, vluint64_t &sim_time){
-    if (sim_time >= VERIF_START_TIME) {
-        dut->in_valid = rand() % 2; // 0 and 1
-    }
-}
-
-
-int main(int argc, char** argv, char** env){
+	
+int main(int argc, char** argv, char** env) {
 	srand (time(NULL));
 	Verilated::commandArgs(argc, argv);
 	Valu *dut = new Valu;
@@ -80,22 +186,35 @@ int main(int argc, char** argv, char** env){
 	dut->trace(m_trace, 5);
 	m_trace->open("waveform.vcd");
 
+	AluInTx *tx;
+
+	AluInDrv *drv	= new AluInDrv(dut);
+	AluMon 	 *inMon = new AluInMon(dut, scb);
+	AluOutMon *outMon = new AluOutMon(dut,scb);
+	AluScb	 *scb	= new AluScb();
+
 	while (sim_time < MAX_SIM_TIME) {
 		dut_reset(dut, sim_time);
+		dut->clk ^= 1;
+		dut->eval();
 
-		dut->clk ^= 1; //invert OR ~clk
-	    dut->eval(); // evulate for tracing
-
-		if(dut->clk == 1){
-			set_rnd_in_out_valid(dut, sim_time);
-			check_out_valid(dut, sim_time);  
+		if (dut->clk == 1) {
+			if (sim_time >= VERIF_START_TIME) {
+				tx = rndAluInTx();
+				drv->drive(tx);
+				inMon->monitor();
+				outMon->monitor();
+			}
 		}
-
-       	m_trace->dump(sim_time);
- 		sim_time++;
+		
+		m_trace->dump(sim_time);
+		sim_time++;
 	}
-	
-	m_trace->close();
+
 	delete dut;
+	delete inMon;
+	delete outMon;
+	delete scb;
+	delete drv;
 	exit(EXIT_SUCCESS);
 }	
