@@ -60,30 +60,85 @@ class Scanner {
     private final String source;
     private final List<Token> tokens = new ArrayList<>();
     private int start = 0;
-    private int current = 0;
+    private int cur = 0;
     private int line = 1;
     private boolean isAtEnd() {
-        return current >= source.length();
+        return cur >= source.length();
     }
     private char advance() {
-        return source.charAt(current++);
+        return source.charAt(cur++);
     }
     private void addToken(TokenType type) {
         addToken(type, null);
     }
     private void addToken(TokenType type, Object literal) {
-        String text = source.substring(start, current);
+        String text = source.substring(start, cur);
         tokens.add(new Token(type, text, literal, line));
     }
     private boolean match(char expected) {
         if (isAtEnd()) return false;
-        if (source.charAt(current) != expected) return false;
-        current ++;
+        if (source.charAt(cur) != expected) return false;
+        cur++;
         return true;
     }
     private char peek() {
         if (isAtEnd()) return '\0';
-        return source.charAt(current);
+        return source.charAt(cur);
+    }
+    private void string() {
+        while (peek()!= '"' && !isAtEnd()) {
+            // multi-line str
+            if (peek() == '\n') line++;
+            advance();
+        }
+        if (isAtEnd()) {
+            Lox.error(line, "unterminated str");
+            return;
+        }
+        advance();
+        // substr stripping off the quotes
+        String val = source.substring(start+1, cur-1)
+        addToken(STRING, val);
+    }
+    private boolean isDigit(char c) {
+        return c >= '0' && c <= '9';
+    }
+    private peekNext() {
+        if (cur+1 >= source.length()) return '\0';
+        return source.charAt(cur+1);
+    }
+    private void number() {
+        while (isDigit(peek())) advance();
+        // fraction
+        if (peek() == '.' && isDigit(peekNext())) {
+            // consume . if peekNext is a digit, lookahead
+            advance();
+            while (isDigit(peek())) advance();
+        }
+        addToken(NUMBER, Double.parseDouble(source.substring(start, cur)));
+    }
+    private boolean isAlpha(char c) {
+        return (c >= 'a' && c <= 'z') ||
+                c == '_';
+    }
+    private boolean isAlphaNumeric(char c) {
+        return isAlpha(c) || isDigit(c);
+    }
+    private void identifier() {
+        while (isAlphaNumeric(peek())) advance();
+        String text = source.substring(start, cur);
+        TokenType type = keywords.get(text);
+        // user-defined type identifier, not in keywords
+        if (type == null) type = IDENTIFIER;
+        addToken(type);
+    }
+    private static final Map<String, TokenType> keywords;
+    static {
+        keywords = new HashMap<>();
+        keywords.put("and", AND);
+        keywords.put("class", CLASS);
+        keywords.put("nil", NIL);
+        keywords.put("while", WHILE);
     }
     private void scanToken() {
         char c = advance();
@@ -108,9 +163,16 @@ class Scanner {
             case '\n':
                 line++;
                 break;
+            case '"': string(); break;
             default:
-                Lox.error(line, "unexpected char");
-                break;
+                if (isDigit(c)) {
+                    number();
+                } else if (isAlpha(c)) {
+                    identifier();
+                } else {
+                    Lox.error(line, "unexpected char");
+                    break;
+                }
         }
     }
     Scanner(String source) {
@@ -119,7 +181,7 @@ class Scanner {
 }
 List<Token> scanTokens() {
     while (!isAtEnd()) {
-        start = current;
+        start = cur;
         scanToken();
     }
     tokens.add(new Token(EOF, "", null, line));
