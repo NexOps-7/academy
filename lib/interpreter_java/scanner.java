@@ -160,6 +160,7 @@ class Scanner {
             case '\t':
                 // whitespace, ignore
                 break;
+            // ...
             case '\n':
                 line++;
                 break;

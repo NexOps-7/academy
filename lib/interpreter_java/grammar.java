@@ -1,6 +1,12 @@
 package com.lox;
 package com.tool;
 
+// file to generate Expr.java
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.Arrays;
+import java.util.List;
+
 // ast abstract syntax tree
 abstract class Expr {
     static class Binary extends Expr {
@@ -14,12 +20,6 @@ abstract class Expr {
         final Expr right;
     }
 }
-
-// file to generate Expr.java
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.Arrays;
-import java.util.List;
 
 private static void defineType(
     PrintWriter writer, String baseName, String className, String fieldList) {
@@ -35,7 +35,7 @@ private static void defineType(
         writer.println("    @Override");
         // void accept(ExprVisitor visitor), interface Visitor<R>
         writer.println("    <R> R accept(Visitor<R> visitor) {");
-        // visitor.visitGroupingExpr(this);
+        // return visitor.visitGroupingExpr(this);
         writer.println("      return visitor.visit" + className + baseName + "(this);");
         writer.println("    }");
         writer.println();
@@ -44,6 +44,20 @@ private static void defineType(
         }
         writer.println("    }");
     }
+// visitor row and col overloading oop
+// interface
+// abstract class Expr{} 
+//      class binaryExpr extends Expr{}, 
+//      class groupingExpr extends Expr{}
+// interface ExprVisitor{
+//      void visitBinary(Binary binary); 
+//      void visitGrouping(Grouping grouping)}
+// accept(): abstract class Expr{
+//              abstract void accept(ExprVisitor vistor)}, 
+//      class binaryExpr extends Expr{
+//          @Override 
+//          void accept(ExprVisitor visitor){
+//              visitor.visitBinary(this)}}
 private static void defineVisitor(
     PrintWriter writer, String baseName, List<String> types){
         // interface Expr.Visitor
