@@ -5,9 +5,16 @@
 
 typedef double Val;
 typedef struct {
-    int cap;
     int cnt;
-    Val* val;
-} ValArray;
+    int cap;
+    Val* vals;
+} ValArr;
+
+void initValArr(ValArr* arr);
+void writeValArr(ValArr* arr, Val val);
+void freeValArr(ValArr* arr);
+void printVal(Val val) {
+    printf("%g", val);
+}
 
 #endif

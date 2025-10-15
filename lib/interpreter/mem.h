@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-#define GROU_CAP(cap) \
+#define GROW_CAP(cap) \
     ((cap) < 8 ? 8 : (cap) * 2)
 // ptr: arr/struct
 #define GROW_ARR(type, ptr, oldCnt, newCnt) \
@@ -12,7 +12,6 @@
         sizeof(type) * (newCnt))
 #define FREE_ARRAY(type, ptr, oldCnt) \
     ralloc(ptr, sizeof(type)*(oldCnt), 0)
-
 void* ralloc(void* ptr, size_t oldSize, size_t newSize);
 
 #endif
