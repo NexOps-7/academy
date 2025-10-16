@@ -45,7 +45,7 @@ int disassembleInstru(Chunk* chunk, int offset) {
 }
 void disassembleChunk(Chunk* chunk, const char* name) {
     printf("== %s ==\n", name);
-    // instructions diff sizes, not offset++
+    // instructions diff sizes, not offset++ here
     for (int offset = 0; offset < chunk->cnt;) {
         offset = disassembleInstru(chunk, offset);
     }

@@ -11,8 +11,8 @@ void initChunk(Chunk* chunk) {
     chunk->cap = 0;
     chunk->code =  NULL;
     chunk->line =  NULL;
-    // &: access the mem addr, ref
-    // *: deref/access mem addr ref by a ptr
+    // &: access the mem addr
+    // *: deref/access val ref by a ptr addr
     // ref: the obj, ptr with cyntactic sugar
     initValArr(&chunk->cons);
 }
