@@ -3,6 +3,7 @@
 #include "vm.h"
 #include "debug.h"
 #include "val.h"
+#include "compiler.h"
 
 // global VM obj, instead of passing ptr to numerous func
 // not the best practice
@@ -40,6 +41,16 @@ static InterpretRes run() {
 // &: obtain the addr, generate a ptr
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONS() (vm.chunk->cons.vals[READ_BYTE()])
+// c preprocessor
+#define BINARY_OP(op) \
+    do { \
+        // right before a since left evald first, right on top
+        double b = pop(); \
+        double a = pop(); \
+        push(a op b);\
+    // force semicolon/exit after one iteration
+    } while (false)
+
     for (;;) {
 #ifdef DEBUG_TRACE_EXEC
         printf("        ");
@@ -59,6 +70,9 @@ static InterpretRes run() {
                 push(cons);
                 break;
             }
+            case OP_ADD:    BINARY_OP(+); break;
+            case OP_DIV:    BINARY_OP(/); break;
+            case OP_NEGATE: push(-pop()); break;
             case OP_RET: {
                 printVal(pop());
                 printf("\n");
@@ -68,11 +82,17 @@ static InterpretRes run() {
     }
 #undef READ_BYTE
 #undef READ_CONS
+#undef BINARY_OP
 }
+
+InterpretRes interpret(const char* src) {
+    compile(src);
+    return INTERPRET_OK;
+};
 // Chunk*: chunk addr, not the struct/copying it
 // type declaration, chunk being a ptr to Chunk
-InterpretRes interpret(Chunk* chunk) {
-    vm.chunk = chunk;
-    vm.ip = vm.chunk->code;
-    return run();
-}
+// InterpretRes interpret(Chunk* chunk) {
+//     vm.chunk = chunk;
+//     vm.ip = vm.chunk->code;
+//     return run();
+// }

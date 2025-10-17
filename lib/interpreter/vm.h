@@ -16,7 +16,7 @@ length: prev val need to stay around to wait for the right
 end: val consumed by op
 stack: first in last out -> last in first out
 pop off: consuming num from rightmost to left, return
-push: instruction produce val, op/cons
+push: instruction produce val, cons/op
 stackTop: stack size varies, keep track of the top
 ip: use ptr, easier to deref(access val) than int index offset calc
 ptr: ele+1, to void ele-1 from empty stack
@@ -42,7 +42,10 @@ typedef enum {
 
 void initVM();
 void freeVM();
-InterpretRes interpret(Chunk* chunk);
+
+InterpretRes interpret(const char* src);
+// InterpretRes interpret(Chunk* chunk);
+
 void push(Val val);
 void pop();
 

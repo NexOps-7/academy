@@ -9,8 +9,8 @@
 void initChunk(Chunk* chunk) {
     chunk->cnt = 0;
     chunk->cap = 0;
-    chunk->code =  NULL;
-    chunk->line =  NULL;
+    chunk->code = NULL;
+    chunk->line = NULL;
     // &: access the mem addr
     // *: deref/access val ref by a ptr addr
     // ref: the obj, ptr with cyntactic sugar

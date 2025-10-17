@@ -8,7 +8,9 @@ typedef enum {
     // instructions
     // on which order to produce
     OP_CONS,
-    // e.g read one single byte op code
+    OP_ADD,
+    OP_DIV,
+    OP_NEGATE,
     // ret from the curr func
     OP_RET,
 } OpCode;

@@ -35,6 +35,12 @@ int disassembleInstru(Chunk* chunk, int offset) {
     switch(instru) {
         case OP_CONS:
             return consInstru("OP_CONS", chunk, offset);
+        case OP_NEGATE:
+            return simpleInstru("OP_NEGATE", offset);
+        case OP_ADD:
+            return simpleInstru("OP_ADD", offset);
+        case OP_DIV:
+            return simpleInstru("OP_DIV", offset);
         case OP_RET:
             // read single byte
             return simpleInstru("OP_RET", offset);
