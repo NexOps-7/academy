@@ -9,7 +9,7 @@ static int simpleInstru(const char* name, int offset) {
     return offset + 1;
 }
 static int consInstru(const char* name, Chunk* chunk, int offset) {
-    uinit8_t cons = chunk->code[offset+1];
+    uint8_t cons = chunk->code[offset+1];
     // print opcode/OP_CONS, index
     print("%-16s %4d '", name, cons);
     // the actual val from the next chunk index
@@ -30,17 +30,23 @@ int disassembleInstru(Chunk* chunk, int offset) {
     } else {
         printf("%4d ", chunk->line[offset]);
     }
-    // read one byte
-    uinit8_t instru = chunk->code[offset];
+    // read one byte in chunk
+    uint8_t instru = chunk->code[offset];
     switch(instru) {
         case OP_CONS:
             return consInstru("OP_CONS", chunk, offset);
-        case OP_NEGATE:
-            return simpleInstru("OP_NEGATE", offset);
+        case OP_FALSE:
+            return simpleInstru("OP_FALSE", offset);
+        case OP_EQUAL:
+            return simpleInstru("OP_EQUAL", offset);
         case OP_ADD:
             return simpleInstru("OP_ADD", offset);
         case OP_DIV:
             return simpleInstru("OP_DIV", offset);
+        case OP_NOT:
+            return simpleInstru("OP_NOT", offset);
+        case OP_NEGATE:
+            return simpleInstru("OP_NEGATE", offset);
         case OP_RET:
             // read single byte
             return simpleInstru("OP_RET", offset);

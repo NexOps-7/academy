@@ -65,7 +65,7 @@ class Parser {
         while (!isAtEnd()) {
             // dicard token at the ; boundary
             if (previous().type == SEMICOLON) return;
-            switch (peak().type) {
+            switch (peek().type) {
                 case CLASS:
                 case IF:
                 case RETURN:

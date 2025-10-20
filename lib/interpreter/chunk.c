@@ -17,17 +17,17 @@ void initChunk(Chunk* chunk) {
     initValArr(&chunk->cons);
 }
 void freeChunk(Chunk* chunk) {
-    FREE_ARR(uinit8_t, chunk->code, chunk->cap);
+    FREE_ARR(uint8_t, chunk->code, chunk->cap);
     FREE_ARR(int, chunk->lines, chunk->cap);
     freeValArr(&chunk->cons);
     // zero out the fields to empty state
     initChunk(chunk);
 }
-void writeChunk(Chunk* chunk, uinit8_t byte, int line) {
+void writeChunk(Chunk* chunk, uint8_t byte, int line) {
     if (chunk->cap < chunk->cnt+1) {
         int oldCap = chunk->cap;
         chunk->cap = GROW_CAP(oldCap);
-        chunk->code = GROW_ARR(uinit8_t, chunk->code,
+        chunk->code = GROW_ARR(uint8_t, chunk->code,
         oldCap, chunk->cap);
         chunk->line = GROW_ARR(int, chunk->line,
         oldCap, chunk->cap);

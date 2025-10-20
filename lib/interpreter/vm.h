@@ -3,6 +3,7 @@
 
 #include "chunk.h"
 #include "val.h"
+#include "table.h"
 
 /*
 fun echo(n) {
@@ -32,6 +33,9 @@ typedef struct {
     uint8_t* ip;
     Val stack[STACK_MAX];
     Val* stackTop;
+    Table strs;
+    // ptr to the header of the objs linked list
+    Obj* objs;
 } VM;
 
 typedef enum {
@@ -39,6 +43,8 @@ typedef enum {
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR
 } InterpretRes;
+
+extern VM vm;
 
 void initVM();
 void freeVM();
@@ -48,5 +54,6 @@ InterpretRes interpret(const char* src);
 
 void push(Val val);
 void pop();
+static void concat();
 
 #endif

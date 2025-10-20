@@ -78,8 +78,8 @@ int main(int argc, const char* argv[]) {
 
     freeVM();
     /*
+        // hand-written chunks of bytecodes test
         #include "debug.h"
-        // hand-written chunks of bytecodes
         Chunk chunk;
         initChunk(&chunk);
         // ret the index

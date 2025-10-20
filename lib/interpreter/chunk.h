@@ -8,8 +8,11 @@ typedef enum {
     // instructions
     // on which order to produce
     OP_CONS,
+    OP_FALSE,
+    OP_EQUAL,
     OP_ADD,
     OP_DIV,
+    OP_NOT,
     OP_NEGATE,
     // ret from the curr func
     OP_RET,

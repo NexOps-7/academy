@@ -1,6 +1,9 @@
 #include <studio.h>
+#include <string.h>
+
 #include "common.h"
 #include "mem.h"
+#include "obj.h"
 
 void initValArr(ValArr* arr) {
     arr->cnt = 0;
@@ -20,4 +23,34 @@ void writeValArr(ValArr* arr, Val val) {
     }
     arr->vals[arr->cnt] = val;
     arr->cnt++;
+}
+bool valsEqual(Val a, Val b) {
+    if (a.type != b.type) return false;
+    switch (a.type) {
+        case VAL_BOOL:  return AS_BOOL(a) == AS_BOOL(b);
+        case VAL_NIL:   return true;
+        case VAL_NUM:   return AS_NUM(a) == AS_NUM(b);
+        case VAL_OBJ:   return AS_OBJ(a) == AS_OBJ(b);
+        // move to table.c to handle for str memcmp()
+        //     // STR -> chars & type
+        //{    ObjStr* aStr = AS_STR(a);
+        //     ObjStr* bStr = AS_STR(b);
+        //     return aStr->length == bStr->length &&
+        //         // test exact chars & length
+        //         memcmp(aStr->chars, bStr->chars,
+        //                 aStr->length) == 0;
+        // }
+        default:        return false;
+    }
+}
+
+void printVal(Val val) {
+    switch (val.type) {
+        case VAL_BOOL:
+            printf(AS_BOOL(val) ? "true" : "false");
+            break;
+        case VAL_NIL: printf("nil"); break;
+        case VAL_NUM: printf("%g", AS_NUM(val)); break;
+        case VAL_OBJ: printObj(val); break;
+    }
 }
