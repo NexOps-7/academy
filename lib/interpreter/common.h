@@ -7,5 +7,6 @@
 
 #define DEBUG_PRINT_CODE
 #define DEBUG_TRACE_EXEC
+#define UINT8_CNT (UINT8_MAX + 1)
 
 #endif

@@ -33,6 +33,7 @@ typedef struct {
     uint8_t* ip;
     Val stack[STACK_MAX];
     Val* stackTop;
+    Table globals;
     Table strs;
     // ptr to the header of the objs linked list
     Obj* objs;

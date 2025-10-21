@@ -9,11 +9,21 @@ typedef enum {
     // on which order to produce
     OP_CONS,
     OP_FALSE,
+    OP_POP,
+    OP_JUMP,
+    OP_JUMP_IF_FALSE,
+    OP_LOOP,
+    OP_GET_LOC,
+    OP_SET_LOC,
+    OP_DEFINE_GLOBAL,
+    OP_GET_GLOBAL,
+    OP_SET_GLOBAL,
     OP_EQUAL,
     OP_ADD,
     OP_DIV,
     OP_NOT,
     OP_NEGATE,
+    OP_PRINT,
     // ret from the curr func
     OP_RET,
 } OpCode;

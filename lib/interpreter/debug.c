@@ -8,10 +8,22 @@ static int simpleInstru(const char* name, int offset) {
     // ret index of the next chunk
     return offset + 1;
 }
+static int byteInstru(const char* name, Chunk* chunk, int offset) {
+    uint8_t slot = chunk->code[offset+1];
+    printf("%-16s %4d\n", name, slot);
+    return offset+2;
+}
+static int jumpInstru(const char* name, int sign, Chunk* chunk, int offset) {
+    // left shift by 8
+    uint16_t jump = (uint16_t)(chunk->code[offset+1] << 8);
+    jump |= chunk->code[offset+2];
+    printf("%-16s %4d->%d\n", name, offset, offset+3+sign+jump);
+    return offset+3;
+}
 static int consInstru(const char* name, Chunk* chunk, int offset) {
     uint8_t cons = chunk->code[offset+1];
     // print opcode/OP_CONS, index
-    print("%-16s %4d '", name, cons);
+    printf("%-16s %4d '", name, cons);
     // the actual val from the next chunk index
     printVal(vals[cons]);
     printf("\n");
@@ -37,6 +49,25 @@ int disassembleInstru(Chunk* chunk, int offset) {
             return consInstru("OP_CONS", chunk, offset);
         case OP_FALSE:
             return simpleInstru("OP_FALSE", offset);
+        case OP_POP:
+            return simpleInstru("OP_POP", offset);
+        case OP_JUMP:
+            return jumpInstru("OP_JUMP", 1, chunk, offset);
+        case OP_JUMP_IF_FALSE:
+            return jumpInstru("OP_JUMP_IF_FALSE", 1, chunk, offset);
+        case OP_LOOP:
+            // loop backwards after execution
+            return jumpInstru("OP_LOOP", -1, chunk, offset);
+        case OP_GET_LOC:
+            return byteInstru("OP_GET_LOC", offset);
+        case OP_SET_LOC:
+            return byteInstru("OP_SET_LOC", offset);
+        case OP_DEFINE_GLOBAL:
+            return consInstru("OP_DEFINE_GLOBAL", chunk, offset);
+        case OP_GET_GLOBAL:
+            return consInstru("OP_GET_GLOBAL", chunk, offset);
+        case OP_SET_GLOBAL:
+            return consInstru("OP_SET_GLOBAL", chunk, offset);
         case OP_EQUAL:
             return simpleInstru("OP_EQUAL", offset);
         case OP_ADD:
@@ -47,6 +78,8 @@ int disassembleInstru(Chunk* chunk, int offset) {
             return simpleInstru("OP_NOT", offset);
         case OP_NEGATE:
             return simpleInstru("OP_NEGATE", offset);
+        case OP_PRINT:
+            return simpleInstru("OP_PRINT", offset);
         case OP_RET:
             // read single byte
             return simpleInstru("OP_RET", offset);

@@ -22,8 +22,11 @@ void initVM() {
     // indicate the stack is empty
     resetStack();
     vm.objs = NULL;
+    initTable(&vm.globals);
+    initTable(&vm.strs);
 }
 void freeVM() {
+    freeTable(&vm.globals);
     freeTable(&vm.strs);
     freeObjs();
 }
@@ -79,13 +82,18 @@ static void concat() {
 // beating heart of the vm, 
 // scanner -> val -> chunk -> stack, op, chunk -> debug-> compiler
 static InterpretRes run() {
-// ip points to the next byte to be used
+// instrucion ptr points to the next byte to be used
 // ip read opcode before executing the instruction
 // *vm.ip: * deref the ptr ip address and access the val
 // &: obtain the addr, generate a ptr
 #define READ_BYTE() (*vm.ip++)
+// pull next two bytes from chunk, build 16-bit unsigned int
+#define READ_SHORT() \
+        (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1])) \
 #define READ_CONS() (vm.chunk->cons.vals[READ_BYTE()])
-// c preprocessor
+// AS_STR: (ObjStr*)(Val).union{bool, double, obj*} const table
+#define READ_STR() AS_STR(READ_CONS())
+// c preprocessor macros
 #define BINARY_OP(valType, op) \
     do { \
         // right before a left eval first, right on top
@@ -123,6 +131,69 @@ static InterpretRes run() {
                 break;
             }
             case OP_FALSE:  push(BOOL_VAL(false)); break;
+            case OP_POP:    pop(); break;
+            case OP_JUMP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip += offset;
+                break;
+            }
+            case OP_JUMP_IF_FALSE: {
+                // 16 bit operand
+                uint16_t offset = READ_SHORT();
+                // if (isFalsey(peek(0))) vm.ip += offset;
+                vm.ip += falsey() * offset;
+                break;
+            }
+            case OP_LOOP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip -= offset;
+                break;
+            }
+            case OP_GET_LOC: {
+                uint8_t slot = READ_BYTE();
+                push(vm.stack[slot]);
+                break;
+            }
+            case OP_SET_LOC: {
+                // assignment expr produces a val
+                // take from stacktop, store and leave the val on the stack, dont pop()
+                uint8_t slot = READ_BYTE();
+                vm.stack[slot] = peek(0);
+                break;
+            }
+            case OP_DEFINE_GLOBAL: {
+                // get name from constant table
+                ObjStr* name = READ_STR();
+                // name stack on top as key in the hash table
+                // overwrite if already exists
+                tableSet(&vm.globals, name, peek(0));
+                pop();
+                break;
+            }
+            case OP_GET_GLOBAL: {
+                // use constant table index of instruction operand to get var name as key
+                ObjStr* name = READ_STR();
+                Val val;
+                // key doesnt exist
+                if (!tableGet(&vm.globals, name, &val)) {
+                    runtimeErr("Undefined var '%s' ", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                push(val);
+                break;
+            }
+            case OP_SET_GLOBAL: {
+                ObjStr* name = READ_STR();
+                // tableSet(table, key, val)
+                // ret isNewKey, var undefined
+                if (tableSet(&vm.globals, name, peek(0))) {
+                    // del the zombie val of the stored undefined global vars in table
+                    tableDel(&vm.globals, name);
+                    runtimeErr("Undefined var '%s' ", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
             case OP_EQUAL:  {
                 Val b = pop();
                 Val a = pop();
@@ -157,15 +228,20 @@ static InterpretRes run() {
                 push(NUM_VAL(-AS_NUM(pop())));
                 break;
                 // push(-pop()); break;
-            case OP_RET: {
+            case OP_PRINT:
                 printVal(pop());
                 printf("\n");
+                break;
+            case OP_RET: {
+                // exit interpreter
                 return  INTERPRET_OK;
             }
         }
     }
 #undef READ_BYTE
+#undef READ_SHORT
 #undef READ_CONS
+#undef READ_STR
 #undef BINARY_OP
 }
 
@@ -190,7 +266,6 @@ InterpretRes interpret(const char* src) {
         compile(src);
         return INTERPRET_OK; */
 };
-
 /*
     // hand-written vm chunk test
     // *chunk: a ptr to Chunk, access Chunk addr, not copying it
