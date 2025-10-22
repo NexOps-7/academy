@@ -2,27 +2,27 @@
 #include "debug.h"
 #include "val.h"
 
-static int simpleInstru(const char* name, int offset) {
+static int simpleInstruction(const char* name, int offset) {
     // opcode/OP_RET
     printf("%s\n", name);
     // ret index of the next chunk
     return offset + 1;
 }
-static int byteInstru(const char* name, Chunk* chunk, int offset) {
+static int byteInstruction(const char* name, Chunk* chunk, int offset) {
     uint8_t slot = chunk->code[offset+1];
     printf("%-16s %4d\n", name, slot);
     return offset+2;
 }
-static int jumpInstru(const char* name, int sign, Chunk* chunk, int offset) {
+static int jumpInstruction(const char* name, int sign, Chunk* chunk, int offset) {
     // left shift by 8
     uint16_t jump = (uint16_t)(chunk->code[offset+1] << 8);
     jump |= chunk->code[offset+2];
     printf("%-16s %4d->%d\n", name, offset, offset+3+sign+jump);
     return offset+3;
 }
-static int consInstru(const char* name, Chunk* chunk, int offset) {
+static int constantInstruction(const char* name, Chunk* chunk, int offset) {
     uint8_t cons = chunk->code[offset+1];
-    // print opcode/OP_CONS, index
+    // print opcode/OP_CONSTANT, index
     printf("%-16s %4d '", name, cons);
     // the actual val from the next chunk index
     printVal(vals[cons]);
@@ -30,7 +30,7 @@ static int consInstru(const char* name, Chunk* chunk, int offset) {
     // two bytes --one for opcode, one for operand
     return offset + 2;
 }
-int disassembleInstru(Chunk* chunk, int offset) {
+int disassembleInstruction(Chunk* chunk, int offset) {
     // the loc/no. of bytes from the beginning
     printf("%04d ", offset);
     // source line
@@ -43,31 +43,41 @@ int disassembleInstru(Chunk* chunk, int offset) {
         printf("%4d ", chunk->line[offset]);
     }
     // read one byte in chunk
-    uint8_t instru = chunk->code[offset];
-    switch(instru) {
-        case OP_CONS:
-            return consInstru("OP_CONS", chunk, offset);
+    uint8_t instruction = chunk->code[offset];
+    switch(instruction) {
+        case OP_CALL:
+            return byteInstruction("OP_CALL", chunk, offset);
+        case OP_CLOSURE:
+             // single byte operand -> constant
+            offset++;
+            uint8_t constant = chunk->code[offset++];
+            printf("%-16s %4d ", "OP_CLOSURE", constant);
+            printVal(chunk->constants.vals[constant]);
+            printf("\n");
+            return offset;
+        case OP_CONSTANT:
+            return constantInstruction("OP_CONSTANT", chunk, offset);
         case OP_FALSE:
-            return simpleInstru("OP_FALSE", offset);
+            return simpleInstruction("OP_FALSE", offset);
         case OP_POP:
-            return simpleInstru("OP_POP", offset);
+            return simpleInstruction("OP_POP", offset);
         case OP_JUMP:
-            return jumpInstru("OP_JUMP", 1, chunk, offset);
+            return jumpInstruction("OP_JUMP", 1, chunk, offset);
         case OP_JUMP_IF_FALSE:
-            return jumpInstru("OP_JUMP_IF_FALSE", 1, chunk, offset);
+            return jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset);
         case OP_LOOP:
             // loop backwards after execution
-            return jumpInstru("OP_LOOP", -1, chunk, offset);
+            return jumpInstruction("OP_LOOP", -1, chunk, offset);
         case OP_GET_LOC:
-            return byteInstru("OP_GET_LOC", offset);
+            return byteInstruction("OP_GET_LOC", offset);
         case OP_SET_LOC:
-            return byteInstru("OP_SET_LOC", offset);
+            return byteInstruction("OP_SET_LOC", offset);
         case OP_DEFINE_GLOBAL:
-            return consInstru("OP_DEFINE_GLOBAL", chunk, offset);
+            return constantInstru("OP_DEFINE_GLOBAL", chunk, offset);
         case OP_GET_GLOBAL:
-            return consInstru("OP_GET_GLOBAL", chunk, offset);
+            return constantInstru("OP_GET_GLOBAL", chunk, offset);
         case OP_SET_GLOBAL:
-            return consInstru("OP_SET_GLOBAL", chunk, offset);
+            return constantInstru("OP_SET_GLOBAL", chunk, offset);
         case OP_EQUAL:
             return simpleInstru("OP_EQUAL", offset);
         case OP_ADD:

@@ -34,7 +34,16 @@ typedef struct {
     Precedence precedence;
 } ParseRule;
 
-typedef struct {
+typedef enum {
+    TYPE_FUNC,
+    TYPE_SCRIPT
+} FuncType;
+
+typedef struct Compiler {
+    struct Compiler* enclosing;
+    ObjFun* func;
+    FuncType type;
+
     Loc locs[UINT8_CNT];
     int locCnt;
     int scopeDepth;
@@ -46,13 +55,32 @@ typedef struct {
 } Loc;
 // single global var of the struct
 Parser parser;
-Compilier* cur = NULL;
-Chunk* compilingChunk;
-
+Compiler* cur = NULL;
+// Chunk* compilingChunk;
+// static Chunk* curChunk() {
+//     return compilingChunk;
+// }
+static Chunk* curChunk() {
+    return &cur->func->chunk;
+}
 staic void initCompiler(Compiler* compiler) {
+    compilier->enclosing = cur;
+    compiler->func = NULL;
+    compiler->type = type;
     compiler->locCnt = 0;
     compiler->scopeDepth = 0;
+    compiler->func = newFunc();
     cur = compiler;
+    if (type != TYPE_SCRIPT) {
+        // copyStr: findStr() in table, memcpy(), realloc()
+        // copy: func obj outlives the compiler, persist until runtime
+        cur->func->name = copyStr(parser.prev.start, parser.prev.length);
+    }
+    // use locs[] slot 0 for vm internal use, locCnt+1
+    Loc* loc = &cur->locs[cur->locCnt++];
+    loc->depth = 0;
+    loc->name.start = "";
+    loc->name.length = 0;
 }
 static void errAt(Token token, const char* msg) {
     // suppress other errs, keep on trucking, bytecode never get executed
@@ -108,9 +136,6 @@ static void synchronize() {
         advance();
     }
 }
-static Chunk* curChunk() {
-    return compilingChunk;
-}
 static void emitByte(uint8_t byte) {
     // given byte: opcode/operand instruction
     // prev.line: runtime err associated with it
@@ -121,40 +146,48 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
     emitByte(byte2);
 }
 static void emitRet() {
+    // if no val, but return by the end of the body
+    emitByte(OP_NIL);
     emitByte(OP_RET);
 }
-static void endCompiler() {
+static ObjFunc* endCompiler() {
     emitRet();
+    // compiler create func itself and return
+    // before interpret() pass in a chunk to be written to
+    ObjFunc* func = cur->func;
 #ifdef DEBUG_PRINT_CODE
-    if (!parse.hadErr) {
-        disassembleChunk(curChunk(), "code");
+    if (!parser.hadErr) {
+        disassembleChunk(curChunk(), func->name != NULL
+                        ? func->name->chars : "<script>");
     }
 #endif
+    cur = cur->enclosing;
+    return func;
 }
-static uint8_t makeCons(Value val) {
-    // addCons(): chunk.h->vm.h->compile.h
-    // write val to the chunk array/cons table
+static uint8_t makeConstant(Value val) {
+    // addConstant(): chunk.h->vm.h->compile.h
+    // write val to the chunk array/constant table
     // return index
-    int cons = addCons(curChunk(), val);
-    // 0-255, up to 256 cons in the chunk, single byte for the operand
-    // OP_CONS_16 store index as two-byte, scale to larger
-    if (cons > UINT8_MAX) {
-        err("Too many cons in one chunk");
+    int constanttant = addConstant(curChunk(), val);
+    // 0-255, up to 256 constant in the chunk, single byte for the operand
+    // OP_CONSTANT_16 store index as two-byte, scale to larger
+    if (constant > UINT8_MAX) {
+        err("Too many constant in one chunk");
         return 0;
     }
     // constant table/array
-    return (uint8_t)cons;
+    return (uint8_t)constant;
 }
-static void emitCons(Value val) {
-    emitBytes(OP_CONS, makeCons(val));
+static void emitConstant(Value val) {
+    emitBytes(OP_CONSTANT, makeConstant(val));
 }
 
 ParseRule rules[] = {
-    [TOKEN_LEFT_PAREN]  = {grouping, NULL, PREC_NONE},
+    [TOKEN_LEFT_PAREN]  = {grouping, call, PREC_CALL},
     [TOKEN_BANG]        = {unary, NULL, PREC_NONE},
     [TOKEN_BANG_EQUAL]  = {NULL, binary, PREC_EQUALITY},
     [TOKEN_MINUS]       = {unary, NULL, PREC_TERM},
-    [TOKEN_ID]          = {gvar, NULL, PREC_NONE},
+    [TOKEN_ID]          = {var, NULL, PREC_NONE},
     [TOKEN_STR]         = {str, NULL, PREC_NONE},
     [TOKEN_NUM]         = {num, NULL, PREC_NONE},
     [TOKEN_STAR]        = {NULL, binary, PREC_FACTOR},
@@ -165,24 +198,6 @@ ParseRule rules[] = {
 }
 static ParseRule* getRule(TokenType type){
     return &rules[type];
-}
-// todo
-static void prefixRule() {
-    c = getRule(parser.prev.type)
-    switch(c) {
-        case TOKEN_MINUS:
-            parse.cur = -parse.cur;
-        default:
-            return;
-    }
-}
-// todo
-static void infixRule() {
-    switch(c) {
-        case TOKEN_STAR:
-            res = parse.cur * parser.prev;
-    }
-    return res;
 }
 // Precedence: enum, numerically successively larger
 static void parsePrecedence(Precedence precedence) {
@@ -239,12 +254,6 @@ static void printStatement() {
 static void beginScope() {
     cur->scopeDepth++;
 }
-static void block() {
-    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
-        declaration();
-    }
-    consume(TOKEN_RIGHT_BRACE, "Expect '}' after block");
-}
 static endScope() {
     // pop a scope
     cur->scopeDepth--;
@@ -270,13 +279,26 @@ static void statement() {
         beginScope();
         block();
         endScope();
-    }
-    else {
+    } else if (match(TOKEN_RET)) {
+        retStatement();
+    } else {
         exprStatement();
     }
 }
-static int emitJump(uint8_t instru) {
-    emitByte(instru);
+static void retStatement() {
+    if (cur->type == TYPE_SCRIPT) {
+        err(" cant ret from top-level code");
+    }
+    if (match(TOKEN_SEMICOLON)) {
+        emitRet();
+    } else {
+        expr();
+        consume(TOKEN_SEMICOLON, "Expect ';' after ret val");
+        emitByte(OP_RET);
+    }
+}
+static int emitJump(uint8_t instruction) {
+    emitByte(instruction);
     // placeholder for two bytes offset operand
     // 16-bit offset jump up to 65,535 bytes
     emitByte(0xff);
@@ -346,59 +368,41 @@ static void or_(bool canAssign) {
     parsePrecedence(PREC_OR);
     patchJump(endJump);
 }
-static void addLoc(Token* name) {
-    if (cur->locCnt == UINT8_CNT) {
-        err("Too many loc vars in func");
-        return;
+static uint8_t argList() {
+    uint8_t argCnt = 0;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            expr();
+            if (argCnt == 255) {
+                err("Cant have more than 255 args");
+            }
+            argCnt++;
+        } while (match(TOKEN_COMMA));
     }
-    Loc* loc = &cur->locs[cur->locCnt++];
-    loc->name = name;
-    // loc->depth = cur->scopeDepth;
-    // uninitialized state
-    loc->depth = -1;
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after args");
+    return argCnt;
 }
-// only for local: to remember the var exists, put it in locs, name, depth
-static void declareVar() {
-    // top level
-    if (cur->scopeDepth == 0) return;
-    Token* name = &parser.prev;
-    // append to arr, from arr end backwards
-    for (int i = cur->locCnt-1; i>=0; i--) {
-        Loc* loc = &cur->locs[i];
-        // loc var can have same name, as long as diff scope
-        // != -1 local, global others, not within scope?
-        // from arr end backwards look for same name
-        // stop when reach the arr beginning or var owned by another scope
-        if (loc->depth != -1 && loc->depth < cur->scopeDepth) {
-            break;
-        }
-        if (identifiersEqual(name, &loc->name)) {
-            err("Already a var with this name in this scope");
-        }
-    }
-    addLoc(*name);
+static void call(bool canAssign) {
+    uint8_t argCnt = argList();
+    emitBytes(OP_CALL, argCnt);
 }
-static void parseVar(const char* errMsg ) {
-    consume(TOKEN_ID, errMsg);
-    // only for loc, put in locs[], record the existence of the var
-    declareVar();
-    // in loc scope, no need to store var in constant table, ret dummy index
-    if (cur->scopeDepth > 0) return 0;
-    return identifierCons(&parser.prev);
-}
-// var cuppa = "joe";
-//    1             2
-// 1->uninitialized
-// 2->initialized
-// avoid var a = "outer"; {var a = a;}
 static void markInitialized() {
+    // var cuppa = "joe";
+    //    1             2
+    // 1->uninitialized
+    // 2->initialized
+    // avoid var a = "outer"; {var a = a;}
+    // global
+    if (cur->scopeDepth == 0) return;
+    // local
     cur->locs[cur->locCnt-1].depth =
         cur->scopeDepth;
 }
-// global var can be defined after ref compiled before execution, good for manual recursion
-// fun showVar() {print global;}
-// var global = "after"; showVar();
+
 static void defineVar(uint8_t global){
+    // global var can be defined after ref compiled before execution, good for manual recursion
+    // fun showVar() {print global;}
+    // var global = "after"; showVar();
     emitBytes(OP_DEFINE_GLOBAL, global);
     // local var already in temp, top of the stack
     // var a = 1 + 2; var b = 4; 3-a-OP_ADD -> loc slot
@@ -407,8 +411,54 @@ static void defineVar(uint8_t global){
         return;
     }
 }
+static void block() {
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+        declaration();
+    }
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after block");
+}
+static void func(FuncType* type) {
+    Compiler compiler;
+    initCompiler(compiler);
+    beginScope();
+    // err msg
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after func name");
+    // params: like loc var declared in the outermost lexical scope without initializer
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            cur->func->arity++;
+            if (cur->func->arity > 255) {
+                errAtCur("Cant have more than 255 params");
+            }
+            uint8_t constant = parseVar("Expect param name");
+            // emit byte, write chunk arr, markInitialized for loc var
+            defineVar(constant);
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after param");
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before func body ");
+    // recursive declaration() to the end of the body
+    block();
+    // emit return and create func
+    ObjFunc* func = endCompiler();
+    // makeConstant(): return the index from the obj into val in the constant table
+    // emitBytes(): writeChunk() instruction opcode + operands
+    emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(func)));
+}
+static void funcDeclaration() {
+    // func creates & stores a var
+    // index in the constant table
+    // errMsg -> add to locs[] -> token to val -> check size -> return index
+    uint8_t global = parseVar("Expect func name");
+    // can recursively call func itself, mark it right away, not like loc vars
+    markInitialized();
+    func(TYPE_FUNC);
+    // emit byte, write chunk arr, markInitialized for loc var
+    defineVar(global);
+}
 static void varDeclaration() {
-    // the index in the constant table
+    // index in the constant table
+    // errMsg -> add to locs[] -> token to val -> check size -> return index
     uint8_t global = parseVar("Expect var name");
     if (match(TOKEN_EQUAL)) {
         expr();
@@ -460,7 +510,9 @@ static void forStatement() {
 }
 // class, func, var, statement
 static void declaration() {
-    if (match(TOKEN_VAR)) {
+    if (match(TOKEN_FUNC)) {
+        funcDeclaration();
+    } else if (match(TOKEN_VAR)) {
         varDeclaration();
     } else {
         statement();
@@ -470,6 +522,46 @@ static void declaration() {
 static void identifierEqual(Token* a, Token* b) {
     if (a->length != b->length) return false;
     return memcmp(a->start, b->start, a->length) == 0;
+}
+static void addLoc(Token* name) {
+    if (cur->locCnt == UINT8_CNT) {
+        err("Too many loc vars in func");
+        return;
+    }
+    Loc* loc = &cur->locs[cur->locCnt++];
+    loc->name = name;
+    // loc->depth = cur->scopeDepth;
+    // uninitialized state
+    loc->depth = -1;
+}
+// only for local: to remember the var exists, put it in locs, name, depth
+static void declareVar() {
+    // top level
+    if (cur->scopeDepth == 0) return;
+    Token* name = &parser.prev;
+    // append to arr, from arr end backwards
+    for (int i = cur->locCnt-1; i>=0; i--) {
+        Loc* loc = &cur->locs[i];
+        // loc var can have same name, as long as diff scope
+        // != -1 local, global others, not within scope?
+        // from arr end backwards look for same name
+        // stop when reach the arr beginning or var owned by another scope
+        if (loc->depth != -1 && loc->depth < cur->scopeDepth) {
+            break;
+        }
+        if (identifiersEqual(name, &loc->name)) {
+            err("Already a var with this name in this scope");
+        }
+    }
+    addLoc(*name);
+}
+static void parseVar(const char* errMsg ) {
+    consume(TOKEN_ID, errMsg);
+    // only for loc, put in locs[], record the existence of the var
+    declareVar();
+    // in loc scope, no need to store var in constant table, ret dummy index
+    if (cur->scopeDepth > 0) return 0;
+    return identifierCons(&parser.prev);
 }
 static uint8_t resolveLoc(Compiler* compiler, Token* name) {
     // look thru the locs in scope
@@ -489,7 +581,7 @@ static uint8_t resolveLoc(Compiler* compiler, Token* name) {
     // not found
     return -1;
 }
-// var a = nil;
+// global var a = nil;
 static void namedVar(Token name, bool canAssign) {
     uint8_t getOp, setOp;
     uint8_t arg = resolveLoc(cur, &name);
@@ -564,11 +656,11 @@ static void literal(bool canAssign) {
     }
 }
 // only scan the token when compiler needs one
-bool compile(const char* src, Chunk* chunk) {
+ObjFunc* compile(const char* src) {
     initScanner(src);
     Compiler compiler;
-    initCompiler(&compiler);
-    compilingChunk = chunk;
+    initCompiler(&compiler, TYPE_SCRIPT);
+    curChunk = chunk;
     // mode ends when synchronized statement boundaries
     parser.panicMode = false;
     parser.hadErr = false;
@@ -576,8 +668,8 @@ bool compile(const char* src, Chunk* chunk) {
     while (!match(TOKEN_EOF)) {
         declaration();
     }
-    endCompiler();
-    return !parser.hadErr;
+    ObjFunc* func = endCompiler();
+    return parser.hadErr ? NULL : func;
 
     // hand-written scanner test
     /*

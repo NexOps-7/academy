@@ -1,9 +1,11 @@
 #ifdef clox_vm_h
 #define clox_vm_h
 
-#include "chunk.h"
+// #include "chunk.h"
+#include "obj.h"
 #include "val.h"
 #include "table.h"
+
 
 /*
 fun echo(n) {
@@ -24,10 +26,21 @@ ptr: ele+1, to void ele-1 from empty stack
 max: stackTop, ele+1, keep track of
 */
 
-#define STACK_MAX 256
+#define FRAMES_MAX 64
+#define STACK_MAX (FRAMES_MAX * UINT8_CNT)
+
+// track on the stack where ip locs begins, where caller resumes
+typedef struct {
+    // ObjFunc* func;
+    ObjClosure* closure;
+    uint8_t ip;
+    Val* slots;
+} CallFrame;
 
 typedef struct {
-    Chunk* chunk;
+    // Chunk* chunk;
+    CallFrame frames[FRAMES_MAX];
+    int frameCnt;
     // instruction ptr, keep track
     // point to the next instruction to be executed
     uint8_t* ip;

@@ -14,12 +14,12 @@ void initChunk(Chunk* chunk) {
     // &: access the mem addr
     // *: deref/access val ref by a ptr addr
     // ref: the obj, ptr with cyntactic sugar
-    initValArr(&chunk->cons);
+    initValArr(&chunk->constant);
 }
 void freeChunk(Chunk* chunk) {
     FREE_ARR(uint8_t, chunk->code, chunk->cap);
     FREE_ARR(int, chunk->lines, chunk->cap);
-    freeValArr(&chunk->cons);
+    freeValArr(&chunk->constant);
     // zero out the fields to empty state
     initChunk(chunk);
 }
@@ -37,8 +37,8 @@ void writeChunk(Chunk* chunk, uint8_t byte, int line) {
     chunk->cnt++;
 }
 
-int addCons(Chunk* chunk, Val val) {
-    writeValArr(&chunk->cons, val);
+int addConstant(Chunk* chunk, Val val) {
+    writeValArr(&chunk->constant, val);
     // ret the index of the constant
-    return chunk->cons.cnt-1;
+    return chunk->constant.cnt-1;
 }

@@ -26,7 +26,18 @@ static Obj* allocObj(size_t size, objType type) {
     vm.objs = obj;
     return obj;
 }
-
+ObjFunc* newFunc() {
+    ObjFunc* func = ALLOC_OBJ(ObjFunc, OBJ_FUNC);
+    func->arity = 0;
+    func->name = NULL;
+    initChunk(&func->chunk);
+    return func;
+}
+ObjNative* newNative() {
+    ObjNative* native = ALLOC_OBJ(ObjNative, OBJ_NATIVE);
+    native->func = func;
+    return native;
+}
 // obj constructor
 static ObjStr* allocStr(char* chars, int length, uint32_t hash) {
     ObjStr* str = ALLOC_OBJ(objStr, OBJ_STR);
@@ -72,8 +83,23 @@ ObjStr* takeStr(char* chars, int length) {
     }
     return allocStr(chars, length, hash);
 }
+
+static void printFunc(ObjFunc* func) {
+    // print the top level func in diagnostic code
+    if (func->name == NULL) {
+        printf("<script>");
+        return;
+    }
+    printf("<fn %s", func->name->chars);
+}
 void printObj(Val val) {
     switch(OBJ_TYPE(val)) {
+        case OBJ_FUNC:
+            printFunc(AS_FUNC(val));
+        case OBJ_CLOSURE:
+            prinFunc(AS_CLOSURE(val)->func);
+        case OBJ_NATIVE:
+            printf("<native fn>");
         case OBJ_STR:
             // CSTR -> chars, not type
             printf("%s", AS_CSTR(val));

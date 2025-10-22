@@ -4,10 +4,12 @@
 #include "common.h"
 #include "val.h"
 
+// instructions
+// on which order to produce
 typedef enum {
-    // instructions
-    // on which order to produce
-    OP_CONS,
+    OP_CALL,
+    OP_CONSTANT,
+    OP_CONSTANT_16,
     OP_FALSE,
     OP_POP,
     OP_JUMP,
@@ -43,6 +45,6 @@ typedef struct {
 void initChunk(Chunk* chunk);
 void freeChunk(Chunk* chunk);
 void writeChunk(Chunk* chunk, uint8_t byte, int line);
-int addCons(Chunk* chunk, Val val);
+int addConstant(Chunk* chunk, Val val);
 
 #endif

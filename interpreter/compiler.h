@@ -18,8 +18,6 @@ static void endCompilier();
 static uint8_t makeCons(Value val);
 static void emitCons(Value val);
 static ParseRule* getRule(TokenType type);
-static void prefixRule();
-static void infixRule();
 static void parsePrecedence(Precedence precedence);
 static uint8_t identifierCons(Token* name);
 static void expr();
@@ -40,6 +38,7 @@ static void unary(bool canAssign);
 static void binary(bool canAssign);
 static void literal(bool canAssign);
 
-bool compile(const char* src, Chunk* chunk);
+// bool compile(const char* src, Chunk* chunk);
+ObjFunc* compile(const char* src);
 
 #endif
