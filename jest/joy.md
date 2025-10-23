@@ -16,6 +16,6 @@ dont let opportunity be a disadvantage
 
 not to change the db distribution of wealth, but grow the overall pie
 
-build the future, win over nature
+build the future, truth, win over nature
 
-first principle, truth
+first principle

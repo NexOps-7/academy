@@ -32,7 +32,7 @@ static int constantInstruction(const char* name, Chunk* chunk, int offset) {
     return offset + 2;
 }
 int disassembleInstruction(Chunk* chunk, int offset) {
-    // the loc/no. of bytes from the beginning
+    // the local/no. of bytes from the beginning
     printf("%04d ", offset);
     // source line
     // one line complies to a sequence of instructions
@@ -48,6 +48,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
     switch(instruction) {
         case OP_CALL:
             return byteInstruction("OP_CALL", chunk, offset);
+        case OP_CLOSE_UPVAL:
+            return simpleInstruction("OP_CLOSE_UPVAL", offset);
         case OP_CLOSURE:
              // single byte operand -> constant
             offset++;
@@ -58,10 +60,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             ObjFunc* func = AS_FUNC(
                 chunk->constants.vals[constant]);
             for (int j=0: j<func->upvalCnt; j++) {
-                int isLoc = chunk->code[offset++];
+                int isLocal = chunk->code[offset++];
                 int index = chunk->code[offset++];
                 printf("%04d    |   %s %d\n",
-                        offset-2, isLoc ? "loc" : "upval", index);
+                        offset-2, isLocal ? "local" : "upval", index);
             }
             return offset;
         case OP_CONSTANT:
@@ -92,20 +94,20 @@ int disassembleInstruction(Chunk* chunk, int offset) {
         case OP_SET_GLOBAL:
             return constantInstru("OP_SET_GLOBAL", chunk, offset);
         case OP_EQUAL:
-            return simpleInstru("OP_EQUAL", offset);
+            return simpleInstruction("OP_EQUAL", offset);
         case OP_ADD:
-            return simpleInstru("OP_ADD", offset);
+            return simpleInstruction("OP_ADD", offset);
         case OP_DIV:
-            return simpleInstru("OP_DIV", offset);
+            return simpleInstruction("OP_DIV", offset);
         case OP_NOT:
-            return simpleInstru("OP_NOT", offset);
+            return simpleInstruction("OP_NOT", offset);
         case OP_NEGATE:
-            return simpleInstru("OP_NEGATE", offset);
+            return simpleInstruction("OP_NEGATE", offset);
         case OP_PRINT:
-            return simpleInstru("OP_PRINT", offset);
+            return simpleInstruction("OP_PRINT", offset);
         case OP_RET:
             // read single byte
-            return simpleInstru("OP_RET", offset);
+            return simpleInstruction("OP_RET", offset);
         default:
             printf("Unknown opcode %d\n", instru);
             return offset + 1;

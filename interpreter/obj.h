@@ -24,6 +24,7 @@ typedef enum {
     OBJ_FUNC,
     OBJ_CLOSURE,
     OBJ_NATIVE,
+    OBJ_VAL,
     OBJ_STR,
 } ObjType;
 
@@ -35,6 +36,24 @@ struct Obj {
 
 typedef struct {
     Obj obj;
+    // ptr to the val, assigning actual var to upval, not copy
+    Val* location;
+    Val closed;
+    // keep track
+    struct ObjUpval* next;
+} ObjUpval;
+
+typedef struct {
+    Obj obj;
+    ObjFunc* func;
+    // ptr to dynamically allocated arr of ptrs to upvals
+    // each closure has an arr of upvals
+    ObjUpval** upvals;
+    int upvalCnt;
+} ObjClosure;
+
+typedef struct {
+    Obj obj;
     // no. of parameter func expects
     int arity;
     int upvalCnt;
@@ -43,11 +62,6 @@ typedef struct {
     ObjStr* name;
 } ObjFunc;
 
-typedef struct {
-    Obj obj;
-    ObjFunc* func;
-} ObjClosure;
-
 typedef Val (*NativeFn)(int argCnt, Val* args);
 
 typedef struct {
@@ -55,7 +69,7 @@ typedef struct {
     NativeFn func;
 } ObjNative;
 
-struct ObjStr {
+typedef struct ObjStr {
     Obj obj;
     int length;
     char* chars;
@@ -68,9 +82,9 @@ struct ObjStr {
 static inline bool isObjType(Val val, ObjType type) {
     return IS_OBJ(val) && AS_OBJ(val)->type == type;
 }
-
-ObjFunc* newFunc();
+ObjUpval* newUpval(Val* slot);
 ObjClosure* newClosure(ObjFun* func);
+ObjFunc* newFunc();
 ObjNative* newNative();
 static ObjStr* allocStr(char* chars, int length, int hash);
 int hashStr(const char* key, int length);

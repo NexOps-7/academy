@@ -16,6 +16,10 @@ void* ralloc(void* ptr, size_t oldSize, size_t newSize) {
 // free obj node -> mem
 static void freeObj(Obj* obj) {
     switch(obj->type) {
+        case OBJ_UPVAL: {
+            FREE(ObjUpval, obj);
+            break;
+        }
         case OBJ_FUNC: {
             ObjFunc* func = (ObjFunc*)obj;
             freeChunk(&func->chunk);
@@ -23,7 +27,11 @@ static void freeObj(Obj* obj) {
             break;
         }
         case OBJ_CLOSURE: {
-            FREE(ObjClosure, obj);
+            ObjClosure* closure = (ObjClosure*)obj;
+            // FREE_ARR(type, ptr, oldCnt, 0)
+            // FREE(ptr, size, 0) check null
+            FREE_ARR(ObjClosure*, closure->upvals, closure->upvalCnt);
+            FREE(Objclosure, obj);
             break;
         }
         case OBJ_NATIVE: {

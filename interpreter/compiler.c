@@ -42,12 +42,13 @@ typedef enum {
 typedef struct {
     Token name;
     int depth;
-} Loc;
+    bool isCaptured;
+} Local;
 
 // val needs to outlive the func lifetime
 typedef struct {
     uint8_t index;
-    bool isLoc;
+    bool isLocal;
 } Upval;
 
 typedef struct Compiler {
@@ -55,9 +56,9 @@ typedef struct Compiler {
     ObjFun* func;
     FuncType type;
 
-    Loc locs[UINT8_CNT];
+    Local locals[UINT8_CNT];
     Upval upvals[UINT8_CNT];
-    int locCnt;
+    int localCnt;
     int scopeDepth;
 } Compiler;
 
@@ -75,7 +76,7 @@ staic void initCompiler(Compiler* compiler) {
     compilier->enclosing = cur;
     compiler->func = NULL;
     compiler->type = type;
-    compiler->locCnt = 0;
+    compiler->localCnt = 0;
     compiler->scopeDepth = 0;
     compiler->func = newFunc();
     cur = compiler;
@@ -84,11 +85,12 @@ staic void initCompiler(Compiler* compiler) {
         // copy: func obj outlives the compiler, persist until runtime
         cur->func->name = copyStr(parser.prev.start, parser.prev.length);
     }
-    // use locs[] slot 0 for vm internal use, locCnt+1
-    Loc* loc = &cur->locs[cur->locCnt++];
-    loc->depth = 0;
-    loc->name.start = "";
-    loc->name.length = 0;
+    // use locals[] slot 0 for vm internal use, localCnt+1
+    Local* local = &cur->locals[cur->localCnt++];
+    local->depth = 0;
+    local->isCaptured = false;
+    local->name.start = "";
+    local->name.length = 0;
 }
 static void errAt(Token token, const char* msg) {
     // suppress other errs, keep on trucking, bytecode never get executed
@@ -265,11 +267,18 @@ static endScope() {
     // pop a scope
     cur->scopeDepth--;
     // cur scope always at the arr end, look for var declared at scope depth just left
-    // out of scope, no need for slot, discard them, decrem the arr length
-    while (cur->locCnt > 0 &&
-            cur->locs[cur->locCnt - 1].depth > cur->scopeDepth) {
-                emitByte(OP_POP);
-                cur->locCnt--;
+    // when outer() returns, its stack frame destroyed, but inner() still needs local var, hoist to the heap
+    // when returning, at locCnt-1, if iscaptured, upval ptr to local, move to heap, where var always be on stacktop, no op needed
+    // else free the stack slots for locals, out of scope, no need for slot, discard them
+    // decrement the arr length
+    while (cur->localCnt > 0 &&
+            cur->locals[cur->localCnt - 1].depth > cur->scopeDepth) {
+                if (cur->locals[cur->locCnt-1].isCaptured) {
+                    emitByte(OP_CLOSE_UPVAL);
+                } else {
+                    emitByte(OP_POP);
+                }
+                cur->localCnt--;
             }
 }
 static void retStatement() {
@@ -397,7 +406,7 @@ static void markInitialized() {
     // global
     if (cur->scopeDepth == 0) return;
     // local
-    cur->locs[cur->locCnt-1].depth =
+    cur->locals[cur->localCnt-1].depth =
         cur->scopeDepth;
 }
 
@@ -407,7 +416,7 @@ static void defineVar(uint8_t global){
     // var global = "after"; showVar();
     emitBytes(OP_DEFINE_GLOBAL, global);
     // local var already in temp, top of the stack
-    // var a = 1 + 2; var b = 4; 3-a-OP_ADD -> loc slot
+    // var a = 1 + 2; var b = 4; 3-a-OP_ADD -> local slot
     if (cur->scopeDepth > 0) {
         markInitialized();
         return;
@@ -425,7 +434,7 @@ static void func(FuncType* type) {
     beginScope();
     // err msg
     consume(TOKEN_LEFT_PAREN, "Expect '(' after func name");
-    // params: like loc var declared in the outermost lexical scope without initializer
+    // params: like local var declared in the outermost lexical scope without initializer
     if (!check(TOKEN_RIGHT_PAREN)) {
         do {
             cur->func->arity++;
@@ -433,7 +442,7 @@ static void func(FuncType* type) {
                 errAtCur("Cant have more than 255 params");
             }
             uint8_t constant = parseVar("Expect param name");
-            // emit byte, write chunk arr, markInitialized for loc var
+            // emit byte, write chunk arr, markInitialized for local var
             defineVar(constant);
         } while (match(TOKEN_COMMA));
     }
@@ -448,24 +457,24 @@ static void func(FuncType* type) {
     emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(func)));
 
     for (int i=0; i<func->upalCnt; i++) {
-        emitByte(compiler.upvals[i].isLoc ? 1 : 0);
+        emitByte(compiler.upvals[i].isLocal ? 1 : 0);
         emitByte(compiler.upvals[i].index);
     }
 }
 static void funcDeclaration() {
     // func creates & stores a var
     // index in the constant table
-    // errMsg -> add to locs[] -> token to val -> check size -> return index
+    // errMsg -> add to locals[] -> token to val -> check size -> return index
     uint8_t global = parseVar("Expect func name");
-    // can recursively call func itself, mark it right away, not like loc vars
+    // can recursively call func itself, mark it right away, not like local vars
     markInitialized();
     func(TYPE_FUNC);
-    // emit byte, write chunk arr, markInitialized for loc var
+    // emit byte, write chunk arr, markInitialized for local var
     defineVar(global);
 }
 static void varDeclaration() {
     // index in the constant table
-    // errMsg -> add to locs[] -> token to val -> check size -> return index
+    // errMsg -> add to locals[] -> token to val -> check size -> return index
     uint8_t global = parseVar("Expect var name");
     if (match(TOKEN_EQUAL)) {
         expr();
@@ -550,57 +559,58 @@ static void identifierEqual(Token* a, Token* b) {
     if (a->length != b->length) return false;
     return memcmp(a->start, b->start, a->length) == 0;
 }
-static void addLoc(Token* name) {
-    if (cur->locCnt == UINT8_CNT) {
-        err("Too many loc vars in func");
+static void addLocal(Token* name) {
+    if (cur->localCnt == UINT8_CNT) {
+        err("Too many local vars in func");
         return;
     }
-    // loc arr locs[] mirrors the stack slot indexes where locs live at runtime
-    Loc* loc = &cur->locs[cur->locCnt++];
-    loc->name = name;
-    // loc->depth = cur->scopeDepth;
+    // local arr locals[] mirrors the stack slot indexes where locals live at runtime
+    Local* local = &cur->locals[cur->localCnt++];
+    local->name = name;
+    // local->depth = cur->scopeDepth;
     // uninitialized state
-    loc->depth = -1;
+    local->depth = -1;
+    local->isCaptured = false;
 }
-// only for local: to remember the var exists, put it in locs, name, depth
+// only for local: to remember the var exists, put it in locals, name, depth
 static void declareVar() {
     // top level
     if (cur->scopeDepth == 0) return;
     Token* name = &parser.prev;
     // append to arr, from arr end backwards
-    for (int i = cur->locCnt-1; i>=0; i--) {
-        Loc* loc = &cur->locs[i];
-        // loc var can have same name, as long as diff scope
+    for (int i = cur->localCnt-1; i>=0; i--) {
+        Local* local = &cur->locals[i];
+        // local var can have same name, as long as diff scope
         // != -1 local, global others, not within scope?
         // from arr end backwards look for same name
         // stop when reach the arr beginning or var owned by another scope
-        if (loc->depth != -1 && loc->depth < cur->scopeDepth) {
+        if (local->depth != -1 && local->depth < cur->scopeDepth) {
             break;
         }
-        if (identifiersEqual(name, &loc->name)) {
+        if (identifiersEqual(name, &local->name)) {
             err("Already a var with this name in this scope");
         }
     }
-    addLoc(*name);
+    addLocal(*name);
 }
 static void parseVar(const char* errMsg ) {
     consume(TOKEN_ID, errMsg);
-    // only for loc, put in locs[], record the existence of the var
+    // only for local, put in locals[], record the existence of the var
     declareVar();
-    // in loc scope, no need to store var in constant table, ret dummy index
+    // in local scope, no need to store var in constant table, ret dummy index
     if (cur->scopeDepth > 0) return 0;
     return identifierCons(&parser.prev);
 }
-static uint8_t resolveLoc(Compiler* compiler, Token* name) {
-    // look thru the locs in scope
+static uint8_t resolveLocal(Compiler* compiler, Token* name) {
+    // look thru the locals in scope
     // same name as identifier var ref token
     // backwards: find the last declared
-    for (int i=compiler->locCnt-1; i>=0; i--) {
-        Loc* loc = &compiler->locs[i];
-        if (identifierEqual(name, &loc->name)) {
+    for (int i=compiler->localCnt-1; i>=0; i--) {
+        Local* local = &compiler->locals[i];
+        if (identifierEqual(name, &local->name)) {
             // -1: ref to a var in its own initializer
-            if (loc->depth == -1) {
-                err("Cant read loc var in its own initializer");
+            if (local->depth == -1) {
+                err("Cant read local var in its own initializer");
             }
             // found it
             return i;
@@ -609,14 +619,14 @@ static uint8_t resolveLoc(Compiler* compiler, Token* name) {
     // not found
     return -1;
 }
-staic int addUpval(Compiler* compiler, uint8_t index, bool isLoc) {
+staic int addUpval(Compiler* compiler, uint8_t index, bool isLocal) {
     int upvalCnt = compiler->func->upvalCnt;
     for (int i=0; i<upvalCnt; i++) {
         Upval* upval = &compiler->upvals[i];
         // indexes in compiler arr matches the index where upval lives in ObjClosure runtime
-        // as locs[] in runtime stack slot
+        // as locals[] in runtime stack slot
         // find the same slot index upval
-        if (upval->index == index && upval->isLoc == isLoc) {
+        if (upval->index == index && upval->isLocal == isLocal) {
             return i;
         }
     }
@@ -624,18 +634,21 @@ staic int addUpval(Compiler* compiler, uint8_t index, bool isLoc) {
         err('Too many closure vars in func');
         return 0;
     }
-    compiler->upvals[upvalCnt].isLoc = isLoc;
+    compiler->upvals[upvalCnt].isLocal = isLocal;
     compiler->upvals[upvalCnt].index = index;
     return compiler->func->upvalCnt++;
 }
-// each var ref resolved as loc, upval, global
+// each var ref resolved as local, upval, global
 static uint8_t resolveUpval(Compiler* compiler, Token* name) {
-    // first look for a matching loc var in the enclosing func, capture loc and return
+    // each func has a stack frame w/ locals
+    // first look for a matching local var in the enclosing func, identifier resolved
+    // when found, capture true, vm create an upval obj point to the local
     // recursively call on the enclosing compiler
-    // until it finds loc var to capture/run out of compilers
+    // until it finds local var to capture/run out of compilers
     // returns the upval index, returns all the way to the next call for outmost func declaration
-    if (loc != -1) {
-        return addUpval(compiler, (uint8_t)loc, true);
+    if (local != -1) {
+        compiler->enclosing->locals[local].isCaptured = true;
+        return addUpval(compiler, (uint8_t)local, true);
     }
     int upval = resolveUpval(compiler->enclosing, name);
     // found it
@@ -648,8 +661,8 @@ static uint8_t resolveUpval(Compiler* compiler, Token* name) {
 // global var a = nil;
 static void namedVar(Token name, bool canAssign) {
     uint8_t getOp, setOp;
-    uint8_t arg = resolveLoc(cur, &name);
-    // resolveLoc() return found the given name in local var
+    uint8_t arg = resolveLocal(cur, &name);
+    // resolveLocal() return found the given name in local var
     if (arg != -1) {
         getOp = OP_GET_LOC;
         setOp = OP_SET_LOC;

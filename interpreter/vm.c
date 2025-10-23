@@ -15,6 +15,7 @@
 VM vm;
 
 static void resetStack() {
+    vm.openUpvals = NULL;
     vm.stackTop = vm.stack;
     vm.frameCnt = 0;
 }
@@ -122,6 +123,44 @@ static bool callVal(Val callee, int argCnt) {
     runtimeErr("Can only call func & clss");
     return false;;
 }
+static ObjUpval* captureUpval(Val* local) {
+    // make sure only one single ObjUpval for any given local slot
+    // start from the head of the list, the stacktop, ptr comp, past every upval above local, the one we're looking for
+    // update the next to cur/new one upval
+    // then insert created upval into the list, before the obj pointed at by upval
+    // at the head: prev is NULL, NULL->'next'/head vm.openupvals is new created upval
+    // else prev->next
+    ObjUpval* prevUpval = NULL;
+    ObjUpval* upval = vm.openUpvals;
+    while (upval != NULL && upval->location > local) [
+        prevUpval = upval;
+        upval = upval->next;
+    ]
+    if (upval != NULL && upval->location == local) {
+        return upval;
+    }
+    ObjUpval* createdUpval = newUpval(local);
+    createdUpval->next = upval;
+    if (prevUpval == NULL) {
+        vm.openUpvals = createdUpval;
+    } else {
+        prevUpval->next = createdUpval;
+    }
+    return createdUpval;
+}
+static void closeUpvals(Val* last) {
+    while (vm.openUpvals != NULL &&
+            vm.openUpvals->location >= last) {
+        ObjUpval* upval = vm.openUpvals;
+        // obj struct {location, closed, next}
+        // get the location index and pass it to closed
+        // location is a ref to closed
+        // point to next
+        upval->closed = *upval->location;
+        upval->location = &upval->closed;
+        vm.openUpvals = upval->next;
+    }
+}
 void push(Val val) {
     // access the val
     *vm.stackTop = val;
@@ -156,7 +195,7 @@ static void concat() {
     ObjStr* res = takeStr(chars, length);
     push(OBJ_VAL(res));
 }
-// beating heart of the vm, 
+
 // scanner -> val -> chunk -> stack, op, chunk -> debug-> compiler
 static InterpretRes run() {
     // top most callFrame 
@@ -229,7 +268,35 @@ static InterpretRes run() {
                ObjFunc* func = AS_FUNC(READ_CONSTANT());
                ObjClosure* closure = newClosure(func);
                push(OBJ_VAL(closure));
+               for (int i=0; i<closure->upvalCnt; i++) {
+                // read upval
+                // if local, create a upval, slot zero, adding index offset
+                // if not, use cur surrounding closure, callframe stacktop 
+                // read right from the frame local var, caches a ref to callframe
+                // frame->closure->upvals[] frame->slots index
+                uint8_t isLocal = READ_BYTE();
+                uint8_t index = READ_BYTE();
+                if (isLocal) {
+                    closure->upvals[i] = 
+                                    captureUpval(frame->slots + index);
+                } else {
+                    closure->upvals[i] = frame->closure->upvals[index];
+                }
+               }
                break;
+            }
+            case OP_GET_UPVAL: {
+                uint8_t slot = READ_BYTE();
+                // deref location ptr, access val in slot of cur func upvals[] arr
+                push(*frame->closure->upvals[slot]->location);
+                break;
+            }
+            case OP_SET_UPVAL: {
+                uint8_t slot = READ_BYTE();
+                // take stacktop val and store in slot pointed to by chosen upval
+                // need to be fast
+                *frame->closure->upvals[slot]->location = peek(0);
+                break;
             }
             case OP_CONSTANT: {
                 Val constant = READ_CONSTANT();
@@ -260,13 +327,13 @@ static InterpretRes run() {
                 frame->ip -= offset;
                 break;
             }
-            case OP_GET_LOC: {
+            case OP_GET_LOCAL: {
                 uint8_t slot = READ_BYTE();
                 // push(vm.stack[slot]);
                 push(frame->slots[slot]);
                 break;
             }
-            case OP_SET_LOC: {
+            case OP_SET_LOCAL: {
                 // assignment expr produces a val
                 // take from stacktop, store and leave the val on the stack, dont pop()
                 uint8_t slot = READ_BYTE();
@@ -346,11 +413,13 @@ static InterpretRes run() {
                 break;
             case OP_RET: {
                 // exit interpreter
+                // discard callframes, CLOSE_UPVAL for each local var, also close func params, local inside func
                 // ret val on top, pop it but hold on to it
-                // discard callframes
-                // push ret back to lower loc in the stack
+                // pass in the first stack slot owned by the func to close upvals
+                // push ret back to lower local in the stack
                 // update run() cached ptr to cur frame
                 Val res = pop();
+                closeUpvals(frame->slots);
                 vm.frameCnt--;
                 if (vm.frameCnt == 0) {
                     pop();
@@ -379,7 +448,7 @@ InterpretRes interpret(const char* src) {
     ObjFunc* func = compile(src);
     if (func == NULL) return INTERPRET_COMPILE_ERROR;
     push(OBJ_VAL(func));
-    ObjClosure* closure = newClosure(function);
+    ObjClosure* closure = newClosure(func);
     pop();
     push((OBJ_VAL)(closure));
     // initialize callFrame

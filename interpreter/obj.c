@@ -26,6 +26,26 @@ static Obj* allocObj(size_t size, objType type) {
     vm.objs = obj;
     return obj;
 }
+ObjUpval* newUpval(Val* slot) {
+    ObjUpval* upval = ALLOC_OBJ(ObjUpval, OBJ_UPVAL);
+    upval->location = slot;
+    upval->next = NULL;
+    return upval;
+}
+ObjClosure* newClosure(ObjFunc* func) {
+    // alloc & vm.objs ptr next
+    ObjUpval* upvals = ALLOC(ObjUpval*, func->upvalCnt);
+    upval->closed = NIL_VAL;
+    upval->location = slot;
+    for (int i=0; i<func->upvalCnt; i++) {
+        upvals[i] = NULL;
+    }
+    ObjClosure* closure = ALLOC_OBJ(ObjClosure, OBJ_CLOSURE);
+    closure->func = func;
+    closure->upvals = upvals;
+    closure->upvalCnt = func->upvalCnt;
+    return closure;
+}
 ObjFunc* newFunc() {
     ObjFunc* func = ALLOC_OBJ(ObjFunc, OBJ_FUNC);
     func->arity = 0;
@@ -56,7 +76,6 @@ static uint32_t hashStr(const char* key, int length) {
     }
     return hash;
 }
-
 // look up in the str table first, if no, alloc and store in the table
 ObjStr* copyStr(const char* chars, int length) {
     // return a ref to the str, instead of copying
@@ -84,7 +103,6 @@ ObjStr* takeStr(char* chars, int length) {
     }
     return allocStr(chars, length, hash);
 }
-
 static void printFunc(ObjFunc* func) {
     // print the top level func in diagnostic code
     if (func->name == NULL) {
@@ -95,12 +113,18 @@ static void printFunc(ObjFunc* func) {
 }
 void printObj(Val val) {
     switch(OBJ_TYPE(val)) {
+        case OBJ_UPVAL:
+            printf("upval");
+            break;
         case OBJ_FUNC:
             printFunc(AS_FUNC(val));
+            break;
         case OBJ_CLOSURE:
             prinFunc(AS_CLOSURE(val)->func);
+            break;
         case OBJ_NATIVE:
             printf("<native fn>");
+            break;
         case OBJ_STR:
             // CSTR -> chars, not type
             printf("%s", AS_CSTR(val));

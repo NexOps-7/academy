@@ -29,7 +29,7 @@ max: stackTop, ele+1, keep track of
 #define FRAMES_MAX 64
 #define STACK_MAX (FRAMES_MAX * UINT8_CNT)
 
-// track on the stack where ip locs begins, where caller resumes
+// track on the stack where ip locals begins, where caller resumes
 typedef struct {
     // ObjFunc* func;
     ObjClosure* closure;
@@ -44,12 +44,13 @@ typedef struct {
     // instruction ptr, keep track
     // point to the next instruction to be executed
     uint8_t* ip;
+    // ptr to the header of the objs linked list
+    Obj* objs;
+    ObjUpval* openUpvals;
     Val stack[STACK_MAX];
     Val* stackTop;
     Table globals;
     Table strs;
-    // ptr to the header of the objs linked list
-    Obj* objs;
 } VM;
 
 typedef enum {
