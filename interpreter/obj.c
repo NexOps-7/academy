@@ -29,6 +29,7 @@ static Obj* allocObj(size_t size, objType type) {
 ObjFunc* newFunc() {
     ObjFunc* func = ALLOC_OBJ(ObjFunc, OBJ_FUNC);
     func->arity = 0;
+    func->upvalCnt = 0;
     func->name = NULL;
     initChunk(&func->chunk);
     return func;

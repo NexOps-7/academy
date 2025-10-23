@@ -39,20 +39,28 @@ typedef enum {
     TYPE_SCRIPT
 } FuncType;
 
+typedef struct {
+    Token name;
+    int depth;
+} Loc;
+
+// val needs to outlive the func lifetime
+typedef struct {
+    uint8_t index;
+    bool isLoc;
+} Upval;
+
 typedef struct Compiler {
     struct Compiler* enclosing;
     ObjFun* func;
     FuncType type;
 
     Loc locs[UINT8_CNT];
+    Upval upvals[UINT8_CNT];
     int locCnt;
     int scopeDepth;
 } Compiler;
 
-typedef struct {
-    Token name;
-    int depth;
-} Loc;
 // single global var of the struct
 Parser parser;
 Compiler* cur = NULL;
@@ -181,7 +189,6 @@ static uint8_t makeConstant(Value val) {
 static void emitConstant(Value val) {
     emitBytes(OP_CONSTANT, makeConstant(val));
 }
-
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN]  = {grouping, call, PREC_CALL},
     [TOKEN_BANG]        = {unary, NULL, PREC_NONE},
@@ -265,26 +272,6 @@ static endScope() {
                 cur->locCnt--;
             }
 }
-// expr =, for, if, print, ret, while
-static void statement() {
-    if (match(TOKEN_PRINT)) {
-        printStatement();
-    } else if (match(TOKEN_IF)) {
-        ifStatement();
-    } else if (match(TOKEN_WHILE)) {
-        whileStatement();
-    } else if (match(TOKEN_FOR)) {
-        forStatement();
-    } else if (match(TOKEN_LEFT_BRACE)) {
-        beginScope();
-        block();
-        endScope();
-    } else if (match(TOKEN_RET)) {
-        retStatement();
-    } else {
-        exprStatement();
-    }
-}
 static void retStatement() {
     if (cur->type == TYPE_SCRIPT) {
         err(" cant ret from top-level code");
@@ -303,20 +290,19 @@ static int emitJump(uint8_t instruction) {
     // 16-bit offset jump up to 65,535 bytes
     emitByte(0xff);
     emitByte(0xff);
-    // index of first placeholder -2 placeholders
     return curChunk()->cnt - 2;
 }
 // after compiling, replace operand with cal jump offset
 // use cur bytecode to determine how far to jump
 static void patchJump(int offset) {
+    // -2: the jump itself takes 2 bytes
+    // offset: where the jump starts, first byte of the jump's 2-byte offset placeholder
     int jumpDis = curChunk()->cnt - offset - 2;
     if (jumpDis > UINT16_MAX) {
         err("Too much code to jump over");
     }
-    // high byte write offset & update bytecode
-    // &0xff: mask to ensure only lower 8 bits used
+    // replace the placeholder jumpDis, store it back into bytecode
     curChunk()->code[offset] = (jumpDis >> 8) & 0xff;
-    // low byte
     curChunk()->code[offset+1] = jumpDis & 0xff;
 }
 // if -> jump false -> then -> jump -> else
@@ -325,31 +311,47 @@ static void ifStatement() {
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if' ");
     expr();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition");
+    // return placeholder, skip then if false
     int thenJump = emitJump(OP_JUMP_IF_FALSE);
     emitByte(OP_POP);
     statement();
+    // 'then jump/skip then if false' only truly completes after emitting 'else jump'/skip else-block
     int elseJump = emitJump(OP_JUMP);
+    // forward jump: jump over code dont want to execute/exit
+    // execute condition
     patchJump(thenJump);
     emitByte(OP_POP);
     if (match(TOKEN_ELSE)) statement();
+    // after compiling the else block
     patchJump(elseJump);
 }
 static void emitLoop(int loopStart) {
     emitByte(OP_LOOP);
+    // jump back to start, 2 bytes for the jump offset itself
     int offset = curChunk()->cnt - loopStart + 2;
     if (offset > UINT15_MAX) err("Loop body too large");
+    // encode: store 16-bit as two 8-bit bytes to bytecode stream and later read back and reconstruct 16-bit
+    // discard the lowest 8 bits, move highbyte to the right/down, divide offset by 256
+    // bitwise AND: 0x1234 -> 0x12 & low byte 0xff -> 0x12
     emitByte((offset >> 8) & 0xff);
+    // low byte
     emitByte(offset & 0xff);
 }
 static void whileStatement() {
+    // jump back to loopStart
     int loopStart = curChunk()->cnt;
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while' ");
     expr();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition");
+    // index of first placeholder, 2 bytes placeholders
     int exitJump = emitJump(OP_JUMP_IF_FALSE);
     emitByte(OP_POP);
     statement();
+    // backward jump: how far back to the loopstart
+    // execute body, to repeat the loop
     emitLoop(loopStart);
+    // forward jump: jump over code dont want to execute/exit
+    // execute condition
     patchJump(exitJump);
     emitByte(OP_POP);
 }
@@ -443,7 +445,12 @@ static void func(FuncType* type) {
     ObjFunc* func = endCompiler();
     // makeConstant(): return the index from the obj into val in the constant table
     // emitBytes(): writeChunk() instruction opcode + operands
-    emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(func)));
+    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(func)));
+
+    for (int i=0; i<func->upalCnt; i++) {
+        emitByte(compiler.upvals[i].isLoc ? 1 : 0);
+        emitByte(compiler.upvals[i].index);
+    }
 }
 static void funcDeclaration() {
     // func creates & stores a var
@@ -519,6 +526,26 @@ static void declaration() {
     }
     if (parser.panicMode) synchronize();
 }
+// expr =, for, if, print, ret, while
+static void statement() {
+    if (match(TOKEN_PRINT)) {
+        printStatement();
+    } else if (match(TOKEN_IF)) {
+        ifStatement();
+    } else if (match(TOKEN_WHILE)) {
+        whileStatement();
+    } else if (match(TOKEN_FOR)) {
+        forStatement();
+    } else if (match(TOKEN_LEFT_BRACE)) {
+        beginScope();
+        block();
+        endScope();
+    } else if (match(TOKEN_RET)) {
+        retStatement();
+    } else {
+        exprStatement();
+    }
+}
 static void identifierEqual(Token* a, Token* b) {
     if (a->length != b->length) return false;
     return memcmp(a->start, b->start, a->length) == 0;
@@ -528,6 +555,7 @@ static void addLoc(Token* name) {
         err("Too many loc vars in func");
         return;
     }
+    // loc arr locs[] mirrors the stack slot indexes where locs live at runtime
     Loc* loc = &cur->locs[cur->locCnt++];
     loc->name = name;
     // loc->depth = cur->scopeDepth;
@@ -577,6 +605,42 @@ static uint8_t resolveLoc(Compiler* compiler, Token* name) {
             // found it
             return i;
         }
+    }
+    // not found
+    return -1;
+}
+staic int addUpval(Compiler* compiler, uint8_t index, bool isLoc) {
+    int upvalCnt = compiler->func->upvalCnt;
+    for (int i=0; i<upvalCnt; i++) {
+        Upval* upval = &compiler->upvals[i];
+        // indexes in compiler arr matches the index where upval lives in ObjClosure runtime
+        // as locs[] in runtime stack slot
+        // find the same slot index upval
+        if (upval->index == index && upval->isLoc == isLoc) {
+            return i;
+        }
+    }
+    if (upvalCnt == UINT8_CNT) {
+        err('Too many closure vars in func');
+        return 0;
+    }
+    compiler->upvals[upvalCnt].isLoc = isLoc;
+    compiler->upvals[upvalCnt].index = index;
+    return compiler->func->upvalCnt++;
+}
+// each var ref resolved as loc, upval, global
+static uint8_t resolveUpval(Compiler* compiler, Token* name) {
+    // first look for a matching loc var in the enclosing func, capture loc and return
+    // recursively call on the enclosing compiler
+    // until it finds loc var to capture/run out of compilers
+    // returns the upval index, returns all the way to the next call for outmost func declaration
+    if (loc != -1) {
+        return addUpval(compiler, (uint8_t)loc, true);
+    }
+    int upval = resolveUpval(compiler->enclosing, name);
+    // found it
+    if (upval != -1) {
+        return addUpval(compiler, (uint8_t)upval, false);
     }
     // not found
     return -1;

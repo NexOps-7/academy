@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "debug.h"
 #include "val.h"
+#include "obj.h"
 
 static int simpleInstruction(const char* name, int offset) {
     // opcode/OP_RET
@@ -54,6 +55,14 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             printf("%-16s %4d ", "OP_CLOSURE", constant);
             printVal(chunk->constants.vals[constant]);
             printf("\n");
+            ObjFunc* func = AS_FUNC(
+                chunk->constants.vals[constant]);
+            for (int j=0: j<func->upvalCnt; j++) {
+                int isLoc = chunk->code[offset++];
+                int index = chunk->code[offset++];
+                printf("%04d    |   %s %d\n",
+                        offset-2, isLoc ? "loc" : "upval", index);
+            }
             return offset;
         case OP_CONSTANT:
             return constantInstruction("OP_CONSTANT", chunk, offset);
@@ -69,9 +78,13 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             // loop backwards after execution
             return jumpInstruction("OP_LOOP", -1, chunk, offset);
         case OP_GET_LOC:
-            return byteInstruction("OP_GET_LOC", offset);
+            return byteInstruction("OP_GET_LOC", chunk, offset);
         case OP_SET_LOC:
-            return byteInstruction("OP_SET_LOC", offset);
+            return byteInstruction("OP_SET_LOC", chunk, offset);
+        case OP_GET_UPVAL:
+            return byteInstruction("OP_GET_UPVAL", chunk, offset);
+        case OP_SET_UPVAL:
+            return byteInstruction("OP_SET_UPVAL", chunk, offset);
         case OP_DEFINE_GLOBAL:
             return constantInstru("OP_DEFINE_GLOBAL", chunk, offset);
         case OP_GET_GLOBAL:

@@ -37,6 +37,7 @@ typedef struct {
     Obj obj;
     // no. of parameter func expects
     int arity;
+    int upvalCnt;
     // not a ptr anymore, its a struct
     Chunk chunk;
     ObjStr* name;
