@@ -12,6 +12,21 @@ void initTable(Table* table) {
     table->cap = 0;
     table->entries = NULL;
 }
+void tableRemoveWhite(&vm.strs) {
+    for (int i=0; i<table->cap; i++) {
+        Entry* entry = &table->entries[i];
+        if (entry->key != NULL && !entry->key->isMarked) {
+            tableDel(table, entry->key);
+        }
+    }
+}
+void markTable(Table* table) {
+    for (int i=0; i<table->cap, i--) {
+        Entry* entry = table->entry[i];
+        markObj((Obj*)entry->key);
+        markVal(entry->val);
+    }
+}
 void freeTable(Table* table) {
     FREE_ARR(Entry, table->entries, table->cap);
     initTable(table);
@@ -44,7 +59,7 @@ void tableDel(Table* table, ObjStr* key) {
     if(table->cnt == 0) return false;
     Entry* entry = findEntry(table->entries, table->cap, key);
     if (entry->key == NULL) return false;
-    // place tomstone in the entry
+    // place tomstone in the entry, instead of deleting it
     entry->key = NULL;
     entry->val = BOOL_VAL(true);
     return true;

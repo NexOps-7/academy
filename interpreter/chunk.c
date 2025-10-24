@@ -2,6 +2,7 @@
 #include "chunk.h"
 #include "mem.h"
 #include "val.h"
+#include "vm.h"
 
 // store/grow new cap 
 // -> alloc/grow new arr(copy -> del old arr) -> upd code
@@ -38,7 +39,10 @@ void writeChunk(Chunk* chunk, uint8_t byte, int line) {
 }
 
 int addConstant(Chunk* chunk, Val val) {
+    // push on the stack and pop once written to constant table
+    push(val);
     writeValArr(&chunk->constant, val);
+    pop();
     // ret the index of the constant
     return chunk->constant.cnt-1;
 }

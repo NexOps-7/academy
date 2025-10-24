@@ -38,6 +38,12 @@ typedef struct {
 } CallFrame;
 
 typedef struct {
+    size_t bytesAllocated;
+    size_t nextGC;
+    int grayCnt;
+    int grayCap;
+    // an arr of Obj*
+    Obj** grayStack;
     // Chunk* chunk;
     CallFrame frames[FRAMES_MAX];
     int frameCnt;

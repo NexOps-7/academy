@@ -5,20 +5,23 @@
 #include "obj.h"
 
 #define ALLOC(type, cnt) \
-    (type*)ralloc(NULL, 0, sizeof(type)*(cnt))
-#define FREE(type, ptr) ralloc(ptr, sizeof(type), 0)
+    (type*)reallocate(NULL, 0, sizeof(type)*(cnt))
+#define FREE(type, ptr) reallocate(ptr, sizeof(type), 0)
 #define FREE_ARR(type, ptr, oldCnt) \
     // check NUll first
-    ralloc(ptr, sizeof(type)*(oldCnt), 0)
+    reallocate(ptr, sizeof(type)*(oldCnt), 0)
 #define GROW_CAP(cap) \
     ((cap) < 8 ? 8 : (cap) * 2)
 // ptr: arr/struct
 #define GROW_ARR(type, ptr, oldCnt, newCnt) \
-    // type*: cast ret of ralloc() generic void* to the right ptr type
-    (type*)ralloc(ptr, sizeof(type) * (oldCnt), \
+    // type*: cast ret of reallocate() generic void* to the right ptr type
+    (type*)reallocate(ptr, sizeof(type) * (oldCnt), \
         sizeof(type) * (newCnt))
 
-void* ralloc(void* ptr, size_t oldSize, size_t newSize);
+void markObj(Obj* obj);
+void markVal(Val* val);
+void collectGarbage();
+void* reallocate(void* ptr, size_t oldSize, size_t newSize);
 // free linked list from obj.h
 static void freeObj(Obj* obj);
 void freeObjs();

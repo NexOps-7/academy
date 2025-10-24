@@ -15,15 +15,20 @@
 
 // actual func for the macros
 static Obj* allocObj(size_t size, objType type) {
-    // ralloc() returns void ptr: void* realloc()
+    // reallocate() returns void ptr: void* realloc()
     // alloc any kinds of objs
-    Obj* obj = (Obj*)ralloc(NULL, 0, size);
+    Obj* obj = (Obj*)reallocate(NULL, 0, size);
     obj->type = type;
+    obj->isMarked = false;
     // insert obj into the linked list objs
     // ptr to the head of already existed linked list
     obj->next = vm.objs;
     // update the objs ptr to the new obj
     vm.objs = obj;
+#ifdef DEBUG_LOG_GC
+    // %zu size_t
+    printf("%p allocate %zu for %d\n", (void*)obj, size, type);
+%endif
     return obj;
 }
 ObjUpval* newUpval(Val* slot) {
@@ -65,7 +70,10 @@ static ObjStr* allocStr(char* chars, int length, uint32_t hash) {
     str->length = length;
     str->chars = chars;
     str->hash = hash;
+    // stash str pool on the stack first n pop it off once its in tableSet()
+    push(OBJ_VAL(str));
     tableSet(&vm.strs, str, NIL_VAL);
+    pop();
     return str;
 }
 static uint32_t hashStr(const char* key, int length) {

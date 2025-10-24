@@ -15,16 +15,19 @@
 VM vm;
 
 static void resetStack() {
+    // its in the VM stack, no need to alloc stack
+    // access only after vals in, no need to clear unused cells, the stack is empty, 
     vm.openUpvals = NULL;
     vm.stackTop = vm.stack;
     vm.frameCnt = 0;
 }
 void initVM() {
-    // no need to alloc stack since its in the VM stuck
-    // no need to clear unused cells, access only after vals in
-    // indicate the stack is empty
     resetStack();
     vm.objs = NULL;
+    vm.bytesAllocated = 0;
+    vm.nextGC = 1024*1024;
+    // garbage collection: white -> gray -> black process
+    vm.grayCnt = 0;
     initTable(&vm.globals);
     initTable(&vm.strs);
     defineNative("newClock", clockNative);
@@ -182,9 +185,9 @@ static bool isFalsey(Val val) {
     return IS_NIL(val) || (IS_BOOL(val) && !AS_BOOL(val));
 } 
 static void concat() {
-    // val.h -> obj.h
-    ObjStr* b = AS_STR(pop());
-    ObjStr* a = AS_STR(pop());
+    // need to alloc a new char arr on the heap, which trigger gc
+    ObjStr* b = AS_STR(peek(0));
+    ObjStr* a = AS_STR(peek(1));
     int length = a->length + b->length;
     // +1: trailing terminator
     char* chars = ALLOC(char, length+1);
@@ -193,6 +196,8 @@ static void concat() {
     char[length] = '\0';
     // takeStr: construct an obj
     ObjStr* res = takeStr(chars, length);
+    pop();
+    pop();
     push(OBJ_VAL(res));
 }
 

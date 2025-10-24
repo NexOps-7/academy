@@ -17,6 +17,7 @@ typedef struct {
 } Table;
 
 void initTable(Table* table);
+void markTable(Table* table);
 void freeTable(Table* table);
 void findEntry(Entry* entries, int cap, ObjStr* key);
 void tableDel(Table* table, ObjStr* key);

@@ -4,6 +4,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "scanner.h"
+#include "mem.h"
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
 #endif
@@ -52,6 +53,7 @@ typedef struct {
 } Upval;
 
 typedef struct Compiler {
+    // enclosing: outer compiler/func
     struct Compiler* enclosing;
     ObjFun* func;
     FuncType type;
@@ -65,20 +67,16 @@ typedef struct Compiler {
 // single global var of the struct
 Parser parser;
 Compiler* cur = NULL;
-// Chunk* compilingChunk;
-// static Chunk* curChunk() {
-//     return compilingChunk;
-// }
-static Chunk* curChunk() {
-    return &cur->func->chunk;
-}
+
 staic void initCompiler(Compiler* compiler) {
+    // begin a new func, having a inner func soon
     compilier->enclosing = cur;
     compiler->func = NULL;
     compiler->type = type;
     compiler->localCnt = 0;
     compiler->scopeDepth = 0;
     compiler->func = newFunc();
+    // update to new activated compiler, when finish compiling cur = compiler.enclosing
     cur = compiler;
     if (type != TYPE_SCRIPT) {
         // copyStr: findStr() in table, memcpy(), realloc()
@@ -91,6 +89,22 @@ staic void initCompiler(Compiler* compiler) {
     local->isCaptured = false;
     local->name.start = "";
     local->name.length = 0;
+}
+static void markCompilerRoots() {
+    Compiler* compiler = cur;
+    // nested funcs
+    while (compiler != NULL) {
+        markObj((Obj*)cur->func);
+        // go to the outer func
+        compiler = compiler->enclosing;
+    }
+}
+// Chunk* compilingChunk;
+// static Chunk* curChunk() {
+//     return compilingChunk;
+// }
+static Chunk* curChunk() {
+    return &cur->func->chunk;
 }
 static void errAt(Token token, const char* msg) {
     // suppress other errs, keep on trucking, bytecode never get executed
@@ -456,7 +470,7 @@ static void func(FuncType* type) {
     // emitBytes(): writeChunk() instruction opcode + operands
     emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(func)));
 
-    for (int i=0; i<func->upalCnt; i++) {
+    for (int i=0; i<func->upvalCnt; i++) {
         emitByte(compiler.upvals[i].isLocal ? 1 : 0);
         emitByte(compiler.upvals[i].index);
     }
