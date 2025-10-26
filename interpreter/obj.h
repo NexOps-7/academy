@@ -83,7 +83,8 @@ typedef struct {
     Obj obj;
     ObjFunc* func;
     // ptr to dynamically allocated arr of ptrs to upvals
-    // each closure has an arr of upvals
+    // each closure has an arr of upvals, captured var
+    // access to var even after popped from stack
     ObjUpval** upvals;
     int upvalCnt;
 } ObjClosure;

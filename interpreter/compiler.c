@@ -70,7 +70,7 @@ Compiler* cur = NULL;
 
 staic void initCompiler(Compiler* compiler) {
     // begin a new func, having a inner func soon
-    compilier->enclosing = cur;
+    compiler->enclosing = cur;
     compiler->func = NULL;
     compiler->type = type;
     compiler->localCnt = 0;

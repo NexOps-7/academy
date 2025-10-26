@@ -82,10 +82,7 @@ typedef struct {
 #define NUM_VAL(val)    ((Val){VAL_NUM, {.num = val}})
 #define OBJ_VAL(obj)    ((Val){VAL_OBJ, {.obj = (Obj*)obj}})
 
-
 #endif
-
-
 
 typedef struct {
     int cnt;

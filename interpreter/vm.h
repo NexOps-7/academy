@@ -52,6 +52,8 @@ typedef struct {
     uint8_t* ip;
     // ptr to the header of the objs linked list
     Obj* objs;
+    ObjStr* initStr;
+    // the captured var still on the stack, outsider func still executing
     ObjUpval* openUpvals;
     Val stack[STACK_MAX];
     Val* stackTop;
@@ -75,6 +77,5 @@ InterpretRes interpret(const char* src);
 
 void push(Val val);
 void pop();
-static void concat();
 
 #endif

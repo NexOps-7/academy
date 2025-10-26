@@ -1,7 +1,7 @@
 #include <studio.h>
 #include <string.h>
 
-#include "common.h"
+#include "val.h"
 #include "mem.h"
 #include "obj.h"
 
@@ -25,6 +25,12 @@ void writeValArr(ValArr* arr, Val val) {
     arr->cnt++;
 }
 bool valsEqual(Val a, Val b) {
+    #ifdef NAN_BOXING
+        if (IS_NUM(a) && IS_NUM(b)) {
+            return AS_NUM(a) == AS_NUM(b);
+        }
+        return a == b;
+    #else
     if (a.type != b.type) return false;
     switch (a.type) {
         case VAL_BOOL:  return AS_BOOL(a) == AS_BOOL(b);
@@ -42,9 +48,21 @@ bool valsEqual(Val a, Val b) {
         // }
         default:        return false;
     }
+    #endif
 }
 
 void printVal(Val val) {
+    #ifdef NAN_BOXING
+        if (IS_BOOL(val)) {
+            printf(AS_BOOL(val) ? "true" : "false");
+        } else if (IS_NIL(val)) {
+            printf("nil");
+        } else if (IS_NUM(val)) {
+            printf("%g", AS_NUM(val));
+        } else if (IS_OBJ(val)) {
+            printObj(val);
+        }
+    #else
     switch (val.type) {
         case VAL_BOOL:
             printf(AS_BOOL(val) ? "true" : "false");
@@ -53,4 +71,5 @@ void printVal(Val val) {
         case VAL_NUM: printf("%g", AS_NUM(val)); break;
         case VAL_OBJ: printObj(val); break;
     }
+    #endif
 }

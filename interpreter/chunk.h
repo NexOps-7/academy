@@ -39,7 +39,7 @@ typedef struct {
     int cap;
     uint8_t* code;
     int* line;
-    ValArr cons;
+    ValArr constants;
 } Chunk;
 
 void initChunk(Chunk* chunk);

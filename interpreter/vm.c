@@ -1,9 +1,8 @@
 #include <stdio.h>
-#include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <time.h>
 #include "common.h"
-#include "val.h"
 #include "vm.h"
 #include "debug.h"
 #include "compiler.h"
@@ -28,13 +27,18 @@ void initVM() {
     vm.nextGC = 1024*1024;
     // garbage collection: white -> gray -> black process
     vm.grayCnt = 0;
+    vm.grayCap = 0;
+    vm.grayStack = NULL;
+    vm.initStr = NULL;
+    vm.initStr = copyStr("init", 4);
     initTable(&vm.globals);
     initTable(&vm.strs);
-    defineNative("newClock", clockNative);
+    defineNative("newNativeClock", clockNative);
 }
 void freeVM() {
     freeTable(&vm.globals);
     freeTable(&vm.strs);
+    vm.initStr = NULL;
     freeObjs();
 }
 static void runtimeErr(const char* format, ...) {
@@ -51,7 +55,12 @@ static void runtimeErr(const char* format, ...) {
         ObjFunc* func = frame->closure->func;
         // from the beginning to the executing one
         // -1: ip point to next, we want the last failed instruction
-        size_t instruction = frame->ip - frame->func->chunk.code - 1;
+        // ip: instruction ptr, next instruction to be executed
+        // offset: vm.ip-vm.chunk->code
+        // size_t instruction = vm.ip-vm.chunk->code-1;
+        // int line = vm.chunk->lines[instruction];
+        // ->: ptr .:access val from struct, not a ptr
+        size_t instruction = frame->ip - func->chunk.code - 1;
         int line = func->chunk.lines[instruction];
         fprintf(stderr, "[line %d] in ", line);
         if (func->name == NULL) {
@@ -61,11 +70,6 @@ static void runtimeErr(const char* format, ...) {
         }
     }
 
-    // ip: instruction ptr, next instruction to be executed
-    // offset: vm.ip-vm.chunk->code
-    // size_t instruction = vm.ip-vm.chunk->code-1;
-    // int line = vm.chunk->lines[instruction];
-    fprintf(stderr, "[line %d] in script\n", line);
     resetStack();
 }
 static Val clockNative(int argCnt, Val* args) {
@@ -104,8 +108,25 @@ static bool call(ObjClosure* closure, int argCnt) {
 static bool callVal(Val callee, int argCnt) {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
-            // runtime no need to call OBJ_FUNC, since its wrapped in OBJ_CLOSURE
-            // only live in constant table now and wrapped in closure
+            case OBJ_BOUND_METHOD: {
+                ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
+                vm.stackTop[-argCnt-1] = bound->receiver;
+                return call(bound->method, argCnt);
+            }
+            case OBJ_CLASS: {
+                ObjClass* klass = AS_CLASS(callee);
+                vm.stackTop[-argCnt-1] = OBJ_VAL(newInstance(klass));
+                Val initializer;
+                // tableGet(*tb, key, val);
+                if (tableGet(&klass->methods, vm.initStr, &initializer)) {
+                    return call(AS_CLOSURE(initializer), argCnt);
+                } else if (argCnt != 0) {
+                    runtimeErr("Expected 0 args, got %d", argCnt);
+                    return false;
+                }
+                return true;
+            }
+            // runtime OBJ_FUNC only lives in constant table now
             // case OBJ_FUNC:
             //     return call(AS_FUNC(callee), argCnt);
             case OBJ_CLOSURE:
@@ -119,16 +140,50 @@ static bool callVal(Val callee, int argCnt) {
                 push(res);
                 return true;
             default:
-                non-callable obj type
+                // non-callable obj type
                 break;
         }
     }
     runtimeErr("Can only call func & clss");
     return false;;
 }
+static bool invokeFromClass(ObjClass* klass, ObjStr* name, Int argCnt) {
+    Val method;
+    if (!tableGet(&klass->methods; name; &method)) {
+        runtimeErr("undefined property '%s' ", name->chars);
+        return false;
+    }
+    return call(AS_CLOSURE(method), argCnt);
+}
+static bool invoke(ObjStr* name, int argCnt) {
+    Val receiver = peek(argCnt);
+    if (!IS_INSTANCE(receiver)) {
+        runtimeErr("Only instances have methods");
+        return false;
+    }
+    ObjInstance* instance = AS_INSTANCE(receiver);
+    Val val;
+    if (tableGet(&instance->fields, name, &val)) {
+        vm.stackTop[-argCnt-1] = val;
+        return callVal(val, argCnt);
+    }
+    return invokeFromClass(instance->klass, name, argCnt);
+}
+static bool bindMethod(ObjClass* klass, ObjStr* name) {
+    Val method;
+    if (!tableGet(&klass->methods, name, &method)) {
+        runtimeErr("Undefined property '%s' ", name->chars);
+        return false;
+    }
+    ObjBoundMethod* bound = newBoundMethod(peek(0), AS_CLOSURE(method));
+    pop();
+    push(OBJ_VAL(bound));
+    return true;
+}
 static ObjUpval* captureUpval(Val* local) {
     // make sure only one single ObjUpval for any given local slot
-    // start from the head of the list, the stacktop, ptr comp, past every upval above local, the one we're looking for
+    // start from the head of the list, the stacktop, ptr comp, 
+    // past every upval above local, the one we're looking for
     // update the next to cur/new one upval
     // then insert created upval into the list, before the obj pointed at by upval
     // at the head: prev is NULL, NULL->'next'/head vm.openupvals is new created upval
@@ -164,20 +219,31 @@ static void closeUpvals(Val* last) {
         vm.openUpvals = upval->next;
     }
 }
+static void defineMethod(ObjStr* name) {
+    // stacktop val func closure method, when body compiled later on
+    // class defined earlier
+    // bind the method to the class
+    // pop method, leave only class
+    Val method = peek(0);
+    ObjClass* klass = AS_CLASS(peek(1));
+    tableSet(&klass->methods, name, method);
+    pop();
+}
+
 void push(Val val) {
-    // access the val
-    *vm.stackTop = val;
+    // ptr* in header: access the val
     // increment the ptr to the next unused
+    *vm.stackTop = val;
     vm.stackTop++;
 }
 Val pop() {
     // no need to rm it, just move down to mark not in use
-    vm.stackTop--;
     // return the val
+    vm.stackTop--;
     return *vm.stackTop;
 }
 static Val peek(int distance) {
-    // how far down from the stack top
+    // how far down from the stack top -(dis+1)
     return vm.stackTop[-1-distance];
 }
 static bool isFalsey(Val val) {
@@ -189,12 +255,14 @@ static void concat() {
     ObjStr* b = AS_STR(peek(0));
     ObjStr* a = AS_STR(peek(1));
     int length = a->length + b->length;
+    // ptr chars, char type
     // +1: trailing terminator
     char* chars = ALLOC(char, length+1);
+    // memcpy(void *dest, const void *src, size_t cnt);
     memcpy(chars, a->chars, a->length);
-    memcpy(chars+a->length, b->chars. b->length);
+    memcpy(chars+a->length, b->chars, b->length);
     char[length] = '\0';
-    // takeStr: construct an obj
+    // takeStr: construct an objstr*
     ObjStr* res = takeStr(chars, length);
     pop();
     pop();
@@ -211,18 +279,23 @@ static InterpretRes run() {
 // read opcode before executing the instruction
 // *vm.ip: * deref the ptr ip address and access the val
 // &: obtain the addr, generate a ptr
+// READ_CONSTANT()
+// ++: both read and advance by one step, return uint8_t
+// +=2: dont deref directly, but advance the ptr position first, returns later (uin16_t)
 #define READ_BYTE() (*frame->ip++)
 
-// build 16-bit unsigned int, pull next two bytes from chunk
-// short integer: 2 bytes
+// for jump, fetch a 16-bit unsigned int, pull next two bytes from chunk
+// short integer: 2 bytes jump back and forth, calls and funcs
+// vm.ip
 #define READ_SHORT() \
-        (*frame->ip += 2, \
-        // two bytes: 
+        // += 2: skip two bytes
+        // -: bytes before the updated ip
         // [-2]: high byte [-1]: low byte
         // (0x01 << 8 | 0x02) -> left shift -> 0x0102 -> 258
-        (uint16_t)((*frame->ip[-2] << 8) | *frame->ip[-1])) \
+        (frame->ip += 2, \
+        (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
 
-#define READ_CONSTANT() (frame->closure->func->chunk.constant.vals[READ_BYTE()])
+#define READ_CONSTANT() (frame->closure->func->chunk.constants.vals[READ_BYTE()])
 
 // AS_STR: (ObjStr*)(Val).union{bool, double, obj*} constant table
 #define READ_STR() AS_STR(READ_CONSTANT())
@@ -230,11 +303,11 @@ static InterpretRes run() {
 // c preprocessor macros
 #define BINARY_OP(valType, op) \
     do { \
-        // right before a left eval first, right on top
         if (!IS_NUM(peek(0)) || !IS_NUM(peek(1))) { \
             runtimeErr("operands must be num"); \
             return INTERPRET_RUNTIME_ERROR; \
-        }
+        } \
+        // right before a left eval first, right on top
         double b = AS_NUM(pop()); \
         double a = AS_NUM(pop()); \
         push(valType(a op b)); \
@@ -253,7 +326,7 @@ static InterpretRes run() {
             printf("]");
         }
         printf("\n");
-        // offset: vm.ip-vm.chunk->code
+        // vm.ip-vm.chunk->code: offset
         // ->: ptr to a struct .:direct from a struct mem
         disassembleInstruction(&frame->closure->func->chunk, 
                         (int)(frame->ip - frame->closure->func->chunk.code));
@@ -263,11 +336,60 @@ static InterpretRes run() {
             // decoding/dispatching
             case OP_CALL: {
                 int argCnt = READ_BYTE();
+                // get callable add(2, 4) func[arg1, arg2, closure]
+                // stack -> call add -> [6]
+                // else not callable
                 if (!callVal(peek(argCnt), argCnt)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                // update frame
+                // when ret, pops the frame
+                // main script frame 1 + add() calls frame 1 -> main 1
+                frame = &vm.frames[vm.frameCnt-1];
                 break;
             }
+            case OP_INVOKE: {
+                // invoke -> method argCnt call()
+                ObjStr* method = READ_STR();
+                int argCnt = READ_BYTE();
+                if (!invoke(method, argCnt)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCnt - 1];
+                break;
+            }
+            case OP_SUPER_INVOKE: {
+                ObjStr* method = READ_STR();
+                int argCnt = READ_BYTE();
+                ObjClass* superclass = AS_CLASS(pop());
+                if (!invokeFromClass(method, argCnt)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCnt - 1];
+                break;
+            }
+            case OP_CLASS:
+                push(OBJ_VAL(newClass(READ_STR())));
+            case OP_INHERIT: {
+                Val superclass = peek(1);
+                if (!IS_CLASS(superclass)) {
+                    runtimeErr("superclass must be a class");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                // subclass: stacktop last pushed in
+                // superclass: -1
+                // add superclass -> subclass
+                // pop sublass
+                ObjClass* subclass = AS_CLASS(peek(0));
+                tableAddAll(&AS_CLASS(superclass)->methods, &subclass->methods);
+                pop();
+                break;
+            }
+            case OP_METHOD:
+                // method: stacktop last pushed in
+                // lass: -1
+                defineMethod(READ_STR());
+                break;
             case OP_CLOSURE: {
                 // treat like constant
                ObjFunc* func = AS_FUNC(READ_CONSTANT());
@@ -275,10 +397,9 @@ static InterpretRes run() {
                push(OBJ_VAL(closure));
                for (int i=0; i<closure->upvalCnt; i++) {
                 // read upval
-                // if local, create a upval, slot zero, adding index offset
-                // if not, use cur surrounding closure, callframe stacktop 
+                // if local, create a upval, slot zero + index offset
                 // read right from the frame local var, caches a ref to callframe
-                // frame->closure->upvals[] frame->slots index
+                // else, use cur surrounding closure, callframe stacktop 
                 uint8_t isLocal = READ_BYTE();
                 uint8_t index = READ_BYTE();
                 if (isLocal) {
@@ -289,6 +410,12 @@ static InterpretRes run() {
                 }
                }
                break;
+            }
+            case OP_CLOSE_UPVAL: {
+                // stacktop is one below the top sentinel
+                closeUpvals(vm.stackTop-1);
+                pop();
+                break;
             }
             case OP_GET_UPVAL: {
                 uint8_t slot = READ_BYTE();
@@ -303,11 +430,67 @@ static InterpretRes run() {
                 *frame->closure->upvals[slot]->location = peek(0);
                 break;
             }
+            case OP_GET_PROPERTY: {
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeErr("Only instances have properties");
+                    return INTERPRET_RUNTIME_ERROR
+                }
+                /*
+                class Person {
+                    var name = "Alice";
+                }
+                var p = Person();
+                print p.name;
+                */
+                // peek(0): instance p
+                // read var 'name' from constant table
+                // look up 'name' in p's fields
+                // pop p, push val of p Alice
+                ObjInstance* instance = AS_INSTANCE(peek(0));
+                ObjStr* name = READ_STR();
+                Val val;
+                if (tableGet(&instance->fields, name, &val)) {
+                    pop();
+                    push(val);
+                    break;
+                }
+                if (!bindMethod(instance->klass, name)) {
+                    return INTERPRET_RUNTIME_ERROR
+                }
+                break;
+            }
+            case OP_SET_PROPERTY: {
+                // set p.name = "Alice" 
+                // val stacktop instance next
+                if (!IS_INSTANCE(peek(1))) {
+                    runtimeErr("Only instances have properties");
+                    return INTERPRET_RUNTIME_ERROR
+                }
+                ObjInstance instance = AS_INSTANCE(peek(1));
+                // set name->key, val->val in instance table
+                // pop both and push val
+                tableSet(&instance->fields, READ_STR(), peek(0));
+                Val val = pop();
+                pop();
+                push(val);
+                break;
+            }
+            case OP_GET_SUPER: {
+                ObjStr* name = READ_STR();
+                // pushed last thru super.method()
+                ObjClass* superclass = AS_CLASS(pop());
+                if (!bindMethod(superclass, name)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
             case OP_CONSTANT: {
                 Val constant = READ_CONSTANT();
                 push(constant);
                 break;
             }
+            case OP_NIL: push(NIL_VAL); break;
+            case OP_TRUE: push(BOOL_VAL(true)); break;
             case OP_FALSE:  push(BOOL_VAL(false)); break;
             case OP_POP:    pop(); break;
             case OP_JUMP: {
@@ -318,20 +501,24 @@ static InterpretRes run() {
             case OP_JUMP_IF_FALSE: {
                 // 16 bit operand
                 uint16_t offset = READ_SHORT();
-                // null or false
+                // null or false, skip to else
                 // if (isFalsey(peek(0))) vm.ip += offset;
                 if (isFalsey(peek(0))) frame->ip += offset;
                 break;
             }
             case OP_LOOP: {
-                uint16_t offset = READ_SHORT();
                 // read the next two bytes
-                // frame->ip byte ptr, an addr ptr width 32-bit/64-bit, uint8_t* ptr to the bytes 258
-                // to grow bigger jumps -> offset uint16_t up to 65k bytes to jump
-                // one ele one byte, backwards
+                // frame->ip byte ptr, an addr ptr width 32-bit/64-bit 
+                // uint8_t* ptr to the bytes 258
+                // bigger jumps -> offset uint16_t up to 65k bytes to jump
+                // one ele one byte 
+                // backwards to the beginning
+                uint16_t offset = READ_SHORT();
                 frame->ip -= offset;
                 break;
             }
+            // vm get: push getted to stack
+            // vm set: set the stacktop in the frame
             case OP_GET_LOCAL: {
                 uint8_t slot = READ_BYTE();
                 // push(vm.stack[slot]);
@@ -340,22 +527,12 @@ static InterpretRes run() {
             }
             case OP_SET_LOCAL: {
                 // assignment expr produces a val
-                // take from stacktop, store and leave the val on the stack, dont pop()
+                // peek(0): stacktop, store and leave the val on the stack, dont pop()
                 uint8_t slot = READ_BYTE();
                 frame->slots[slot] = peek(0);
                 break;
             }
-            case OP_DEFINE_GLOBAL: {
-                // get name from constant table
-                ObjStr* name = READ_STR();
-                // name stack on top as key in the hash table
-                // overwrite if already exists
-                tableSet(&vm.globals, name, peek(0));
-                pop();
-                break;
-            }
             case OP_GET_GLOBAL: {
-                // use constant table index of instruction operand to get var name as key
                 ObjStr* name = READ_STR();
                 Val val;
                 // key doesnt exist
@@ -366,10 +543,24 @@ static InterpretRes run() {
                 push(val);
                 break;
             }
+            case OP_DEFINE_GLOBAL: {
+                // x = 42 42 pushed to stack x in constant table
+                // store 42 in x table, and pop 42
+                // name: chunk.constants.vals(*vm.ip++).str
+                ObjStr* name = READ_STR();
+                // name from val table as key, stacktop as val
+                // create or update, overwrite if already exists
+                // store in table and pop the stacktop
+                tableSet(&vm.globals, name, peek(0));
+                pop();
+                break;
+            }
             case OP_SET_GLOBAL: {
+                // x = 42, update if x exists, otherwise err
+                // no popping
                 ObjStr* name = READ_STR();
                 // tableSet(table, key, val)
-                // ret isNewKey, var undefined
+                // ret is NewKey true -> var undefined
                 if (tableSet(&vm.globals, name, peek(0))) {
                     // del the zombie val of the stored undefined global vars in table
                     tableDel(&vm.globals, name);
@@ -384,6 +575,8 @@ static InterpretRes run() {
                 push(BOOL_VAL(valsEqual(a, b)));
                 break;
             }
+            case OP_GREATER: BINARY_OP(BOOL_VAL, >); break;
+            case OP_LESS: BINARY_OP(BOOL_VAL, <); break;
             case OP_ADD: {
                 if (IS_STR(peek(0)) && IS_STR(peek(1))) {
                     concat();
@@ -421,8 +614,8 @@ static InterpretRes run() {
                 // discard callframes, CLOSE_UPVAL for each local var, also close func params, local inside func
                 // ret val on top, pop it but hold on to it
                 // pass in the first stack slot owned by the func to close upvals
-                // push ret back to lower local in the stack
-                // update run() cached ptr to cur frame
+                // push ret val back to lower local in the stack
+                // update frame run() cached ptr to cur frame
                 Val res = pop();
                 closeUpvals(frame->slots);
                 vm.frameCnt--;
@@ -444,11 +637,20 @@ static InterpretRes run() {
 #undef BINARY_OP
 }
 
-// runtime
+void hack(bool b) {
+    // ensure run() invoked, avoid unused func compiler err
+    // start with b = true, run() twice
+    run();
+    if (b) hack(false);
+}
+
+// runtime scanning on demand
 // push the returned compiled top level code to the stack
 // initialize to execute the code
 // ptr to the beginning of the func bytecode
-// and at the bot of the val stack
+// push func to create closure
+// pop func, push closure
+// call closure to init frame, run vm
 InterpretRes interpret(const char* src) {
     ObjFunc* func = compile(src);
     if (func == NULL) return INTERPRET_COMPILE_ERROR;
@@ -461,7 +663,7 @@ InterpretRes interpret(const char* src) {
 
     return run;
 
-    // no chunk anymore
+    // chunk test
     // create a new chunk, pass it to vm
     // compiler fill the chunk with bytecode if no err
     // Chunk chunk;
