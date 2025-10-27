@@ -49,8 +49,8 @@ set & get
         global: in table, update var
     get: get val from tables
 compiler
+    compiler->func block recursively
     compiler->closure->upval->isLocal index
-    compiler->func
 table:
     obj bound menthod table
     obj instance fields table
@@ -74,4 +74,13 @@ offset:
         +2: jump placeholder offset 1 from op, skip then jump
         -2: read_short 2 bytes/16-bit before jump
     -1: cnt-1, index in arr
+jump:
+    skipthenjump, pop condition true
+    skipelsejump, patch then jump, pop condition false, patch else jump
+    while emit back to loopstart loopstart=increm, patch jump body
+1 byte = 8-bit
+    frame stack 
+    tables class methods fields constant/strs globals
+    chunk valarr
+    objs objstr objfunc objupval objclosure objboundmethod objclass objinstance
 
