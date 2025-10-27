@@ -39,10 +39,10 @@ void writeChunk(Chunk* chunk, uint8_t byte, int line) {
 }
 
 int addConstant(Chunk* chunk, Val val) {
-    // push on the stack and pop once written to constant table
+    // push on the stack, written to constant table and pop val
+    // ret index, constants.cnt-1, if first constant, 0
     push(val);
-    writeValArr(&chunk->constant, val);
+    writeValArr(&chunk->constants, val);
     pop();
-    // ret the index of the constant
-    return chunk->constant.cnt-1;
+    return chunk->constants.cnt-1;
 }

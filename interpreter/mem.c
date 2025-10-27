@@ -111,8 +111,9 @@ void collectGarbage() {
             before-vm.bytesAllocated, before, vm.bytesAllocated, vm.nextGC);
 #endif
 }
-// if oldSize == 0, equals to malloc()
 void* reallocate(void* ptr, size_t oldSize, size_t newSize) {
+    // if oldSize == 0, equals to malloc()
+    // return void 
     vm.bytesAllocated += newSize - oldSize;
     if (newSize > oldSize) {
 #ifdef DEBUG_STRESS_GC
@@ -126,15 +127,15 @@ void* reallocate(void* ptr, size_t oldSize, size_t newSize) {
         free(ptr);
         return NULL;
     }
-    // return void 
     void* res = realloc(ptr, newSize);
     if (res == NULL) exit(1);
     return res;
 }
-// free obj node -> mem
+
 static void freeObj(Obj* obj) {
-#ifdef DEBUG_LOG_GC
+    // free obj node -> mem
     // %p: ptr
+#ifdef DEBUG_LOG_GC
     printf("%p free type %d\n", (void*)obj, obj->type);
 #endif
     switch(obj->type) {
@@ -168,8 +169,8 @@ static void freeObj(Obj* obj) {
         }
     }
 }
-// free objs linked list
 void freeObjs() {
+    // free objs linked list
     // ptr to the objs
     Obj* obj = vm.objs;
     while (obj != NULL) {

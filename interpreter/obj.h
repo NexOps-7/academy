@@ -43,13 +43,13 @@ typedef enum {
 
 typedef Val (*NativeFn)(int argCnt, Val* args);
 
-// struct declare: struct Obj obj, new
-// typedef declare: ObjFunc func, anonymous name, alias 
-// twice name declare: ObjUpval upval, link struct next
 struct Obj {
+    // struct Obj{}: new -> struct Obj obj
+    // typedef Obj{}: new -> ObjFunc func, anonymous name, alias 
+    // typedef struct ObjUpval{}ObjUpval: new -> ObjUpval upval, link next struct
+    // next: linked list node, ptr to the Obj struct itself
     ObjType type;
     bool isMarked;
-    // linked list node, ptr to the Obj struct itself
     struct Obj* next;
 };
 
@@ -61,11 +61,11 @@ struct ObjStr {
 };
 
 typedef struct {
+    // arity: no. of parameter func expects
+    // chunk not a ptr anymore, its a struct
     Obj obj;
-    // no. of parameter func expects
     int arity;
     int upvalCnt;
-    // not a ptr anymore, its a struct
     Chunk chunk;
     ObjStr* name;
 } ObjFunc;

@@ -149,8 +149,8 @@ static Token errToken(const char* msg) {
     return token;
 }
 Token scanToken() {
+    // cur = scanToken(), cur is at the start
     skipWhitespace();
-    // cur is at the start
     scanner.start = scanner.cur;
     if (isAtEnd()) return makeToken(TOKEN_EOF);
     char c = advance();

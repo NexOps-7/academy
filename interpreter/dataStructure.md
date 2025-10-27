@@ -1,13 +1,30 @@
 data structures
     locals
         callframe -> stack index, short lived until return
-    upval captured locals
+    upval -> captured locals
         heap/obj arr -> ptr from closure, as long as closure refd
     globals
         table/dict -> name lookup, permanent
     strings
-        func->chunk.constants.vals -> constant id index, as long as chunk exists
-        ip = chunk.code
+        table -> func->chunk.constants.vals -> constant id index, as long as chunk exists
+            ip = chunk.code
+vm stacks -> frame
+    val vm.stackTop(sentinel and then stacktop)
+    callFrame
+        vm.frames[] vm.frameCnt
+        ptr to func closure being called
+    local var  frame->slots[slot]
+    func call state
+            stackTop slot 0 -> op
+            constant table slot++
+    upval *frame->closure->upvals[slot]-location
+        upval = vm.openupvals
+vm (*objs frames[] frameCnt stack stackTop openUpvals **graystack ip globals strs)
+    Vm vm frame: closure ip *slots frame = frames[i] 
+        vm.frame->ip
+        closure: upvalcnt func *upvals
+            vm.frame->closure->upvalcnt
+            vm.frome->closure->func
 garbage collection
     any resizing triggers
 types
@@ -24,33 +41,13 @@ types
         isType IS_OBJ IS_NIL
         val OBJ_VAL
         unions as AS_OBJ AS_NUM
-vm stacks -> frame
-    var  frame->slots[slot]
-    upval *frame->closure->upvals[slot]-location
-        define: 
-            create var
-            global x = 42, x -> constant table, val 42 -> push to stack, pop 42
-        get: push byte val to stacktop
-        set: 
-            local: stacktop -> update the slot frame->slots[slot]
-            global: update var
-vm.stack vm.stackTop(sentinel and then stacktop)
-    vals
-        func call state
-            stackTop slot 0 -> op
-            constant table slot++
-        callFrame
-            vm.frames[] vm.frameCnt
-            ptr to func closure being called
-        upval
-            upval = vm.openupvals 
-vm: *objs frames[] frameCnt stack table **graystack
-    frame: closure ip *slots
-        Vm vm frame = frames[i] 
-            vm.frame->ip
-            closure: upvalcnt func *upvals
-                vm.frame->closure->upvalcnt
-                vm.frome->closure->func
+set & get
+    set: have a val on stacktop to update
+        local: push from frame slot 0 to stacktop 
+            push(frame->slots[slot]) 
+                slot: local from index 0, first local to aritycnt
+        global: in table, update var
+    get: get val from tables
 compiler
     compiler->closure->upval->isLocal index
     compiler->func
@@ -66,4 +63,15 @@ class:
                 -> call frame closure ip slots
         else class
             -> method closure func
+chunk (cap, *code, *line, cnt, constants)
+    cur -> prev/old
+    GROW_CAP GROW_ARR(chunk->code) GROW_ARR(chunk->line)
+    chunk->cnt index chunk->code[chunk->cnt] = byte chunk->cnt++
+    ValArr constants
+offset:
+    cur - start
+        +1: cnt
+        +2: jump placeholder offset 1 from op, skip then jump
+        -2: read_short 2 bytes/16-bit before jump
+    -1: cnt-1, index in arr
 
