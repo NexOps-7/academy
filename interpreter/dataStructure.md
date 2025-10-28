@@ -1,4 +1,12 @@
 data structures
+    stack automatically
+        local var: func locals, temp, val struct primitives
+        call frames: return address, instruction pointer
+    heap garbage collector
+        Objs: strs, func, closures, func, class, boundmethod, instance
+        globals: global vars
+        constant: num, str in constant pool, the whole program lifetime, gc/never freed
+e.g.
     locals
         callframe -> stack index, short lived until return
     upval -> captured locals
