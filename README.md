@@ -8,7 +8,12 @@
     - [x] compiler
     - [ ] os
     - [ ] design pattern
+    - [ ] FPGA
+    - [ ] wiping robot
+    - [ ] workflow/build.yml
+    - [ ] test
     - [x] web
+    - [ ] electric car
 
 ## lan
     - [x] c
