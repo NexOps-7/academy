@@ -13,7 +13,7 @@
     - [ ] workflow/build.yml
     - [ ] test
     - [x] web
-    - [ ] electric car
+    - [ ] electric motor controller
 
 ## lan
     - [x] c
