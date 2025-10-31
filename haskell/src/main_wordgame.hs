@@ -95,7 +95,8 @@ randomWord' = gameWords >>= randomWord
         >let n = Nothing 
         >fmap rendenPuzzleChar [n, Just 'h', n, Just 'e', n] 
             > _h_e
-    fillInChar: insert guess into pz, replace with newFilledInSoFar
+    fillInChar: insert guess/curGuess into wordChar/pz/All isJust, else Nothing/guessChar/old guessed correct one/guessed
+        replace with newFilledInSoFar
     zipWith: f :: (a -> b -> c) -> [a] -> [b] -> [c], apply f to [a] [b] -> [c]
         zipWith (+) [1,2,3] [10, 20, 30] == [11, 22, 33]
         zipper guess: op
