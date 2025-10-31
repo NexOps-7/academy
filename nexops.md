@@ -1,3 +1,9 @@
+turn on cerebral cortex, let limbic system rest as it pleases
+
+quality
+
+improvement/progress/nexops
+
 less is more
 
 if you're not making mistakes, you're not progressing

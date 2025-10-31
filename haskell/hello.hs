@@ -15,15 +15,16 @@ Prelude> sayHello "x"
 -- Hello, x!
 Prelude> :q
 
--- REPL read-eval-print loop
-Prelude> let triple x = x * 3 -- x->head of lambda x*3->body
+{- REPL read-eval-print loop
+    x->head of lambda x*3->body
+    continue the module, showing prompt: :m
+    no typeclass/Num constraint, Integer impl Num -}
+Prelude> let triple x = x * 3
 Prelude> :t triple
 -- triple :: Integer -> Integer
 Prelude> triple 2 
--- (triple x = x * 3)2
+  (triple x = x * 3)2
 -- 6
--- continue the module, showing prompt
-:m
 Prelude> :i (+) (-)
 -- infixl 6 +, -
 Prelude> :t 'a'
@@ -34,7 +35,6 @@ Prelude> triple :: Integer -> Integer
 Prelude> triple x = x * 3
 -- let triple x = x * 3 :: Integer
 Prelude> :t triple
--- no typeclass/Num constraint, Integer impl Num
 -- triple :: Integer -> Integer
 
 x = 5
@@ -42,12 +42,12 @@ y = (1 -)
 myResult = y x
 -- -4
 
--- print: side-effect interact with the outside world effect
+{- print: side-effect interact with the outside world effect -}
 printInc n = print plusTwo
   where plusTwo = n + 2
 printInc2 n = let plusTwo = n + 2
               in print plusTwo
--- \plusTwo -> lamda
+   \plusTwo -> lamda
 printInc2' n =
   (\plusTwo -> print plusTwo) (n + 2)
 c where a = b -- (\a -> c) b
@@ -72,10 +72,10 @@ snd :: (a, b)
 -- 3
 
 -- typeclass/interface, a set of types Num: Integer, Fractional, Real: Double
-(Ord a, Num a) => a -> Ordering
 {-  currying: each func take one arg, ret one res
       nested seccessive for multi func objs -> many funcs, one arg
       outmost layer ret another func that accepts next arg  -}
+(Ord a, Num a) => a -> Ordering
 (Num a, Num b) => a -> b -> b
 -- a -> (b -> b) right associative infix op
 Prelude> :t addStuff
@@ -90,11 +90,11 @@ useFactionalWorks :: Fractional a => a -> a -> a
 useFactionalWorks x y = (x / y) + 1
 -- works
 
--- type constructor arg -> res 
+{- type constructor arg -> res 
+    outmost/first arg/a -> res/nested (b -> (c -> string)) -}
 Prelude> :i (->)
 -- data (->) a b
--- a -> b -> c -> string <=> (a -> (b -> (c -> string)))
--- outmost/first arg/a -> res/nested (b -> (c -> string))
+    a -> b -> c -> string <=> (a -> (b -> (c -> string)))
 funcIgnoresArgs :: a -> a -> a -> string
 funcIgnoresArgs x y z = "Blah"
 Prelude> :t funcIgnoresArgs
@@ -134,7 +134,6 @@ Prelude> uncurry (+) (1, 2)
 Prelude> 6 / fromIntegral (length [1, 2, 3])
 -- 2.0
 
--- show
 data Mood = Blah
 instance Show Mood where
   show _ = "Blah"
@@ -180,7 +179,7 @@ instance Eq Trivial where
 prelude> Trivial' == Trivial'
 -- true
 
--- all warnings
+{- all warnings -}
 Prelude> :set -Wall
 Prelude> :l hello.hs
 
@@ -199,15 +198,15 @@ instance Eq a => Eq (Identity a) where
 data DayOfWeek =
   Mon | Tue | Weds | Thu
   deriving (Ord, Show)
--- deriving (Eq, Show)
--- instance Ord DayOfWeek where
---   compare Weds _ = GT
+    deriving (Eq, Show)
+  instance Ord DayOfWeek where
+    compare Weds _ = GT
 
 *Main> Mon > Tue
 -- False
 *Main> compare Mon Tue
 -- LT
--- *Main> compare Weds Thu
+*Main> compare Weds Thu
 -- -- GT
 
 addOrd :: (Ord a, Num a) => a -> a -> a

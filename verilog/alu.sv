@@ -1,8 +1,20 @@
+/* verilog: verification and logic
+	operation_t: verilator public -> tx transaction
+			make it pubic in Valu___024unit.h
+		2'h1: set 2-bit address signal to 1 01
+		2'h2: 2 10
+	input [5:0]: 6-bit input port
+	logic [5:0]: 6-bit logic vector 3 state
+		[3:0][7:0]: packed arr, 4 words of 8 bits each, packed into 32-bit vector
+			4-stae vals(0, 1, X, Z), wire/reg 
+				enable modeling for buses/signals
+	always_ff: flip flop, oup on clk edge
+	out_valid <= 1'b1: always be 1, should be in_valid_r */
 typedef enum logic [1:0] {
 	add = 2'h1,
 	sub = 2'h2,
 	nop = 2'h0
-} operation_t /*verilator public*/; //make it pubic in Valu___024unit.h
+} operation_t 
 
 module alu #(
 	parameter WIDTH = 6
@@ -13,7 +25,6 @@ module alu #(
 	input [WIDTH-1:0] a_in,
 	input [WIDTH-1:0] b_in,
 	input 		  in_valid,
-
 	output logic [WIDTH-1:0] out,
 	output logic 		 out_valid
 );
@@ -42,7 +53,7 @@ module alu #(
 		if (in_valid_r) begin
 			case (op_in_r)
 				add: result = a_in_r + b_in_r;
-			        sub: result = a_in_r + (~b_in_r+1'b1);
+			    sub: result = a_in_r + (~b_in_r+1'b1);
 				default: result = '0;
 			endcase
 		end
@@ -55,7 +66,6 @@ module alu #(
 		end else begin
 			out	 <= result;
 			out_valid <= in_valid_r;
-			// out_valid <= 1'b1;// always be 1, should be in_valid_r
 		end
 	end
 endmodule;

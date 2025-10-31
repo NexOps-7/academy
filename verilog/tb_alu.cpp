@@ -6,12 +6,11 @@
 #include "Valu___024unit.h"
 #include <cstdlib>
 
+/* starttime: after reset */
 #define MAX_SIM_TIME 300
-#define VERIF_START_TIME 7 //after reset
+#define VERIF_START_TIME 7 
 vluint64_t sim_time = 0;
 
-
-// generate transaction items -> driver -> inp/out monitor -> scoreboard
 class AluInTx {
 	public:
 		uint32_t a;
@@ -29,23 +28,23 @@ class AluOutTx {
 };
 
 class AluInDrv {
+	/* transactions drive to inp interface pins
+		always_comb begin
+			dut.in_valid =1'b0;
+			if (tx item exists && tx item operation != NOP) begin
+				dut.in_valid = 1'b1;
+			end
+		end */
 	private:
 		Valu *dut;
 	public:
 		AluInDrv(Valu *dut) {
 			this->dut = dut;
 		}
-
 		void drive(AluInTx *tx) {
 			dut->in_valid = 0;
 			if (tx != NULL) {
-				if (tx->op != AluInTx::nop) { // drive to inp interface pins
-					// always_comb begin
-					//	dut.in_valid =1'b0;
-					//	if (tx item exists && tx item operation != NOP) begin
-					//		dut.in_valid = 1'b1;
-					//	end
-					// end
+				if (tx->op != AluInTx::nop) { 	
 					dut->in_valid = 1;
 					dut->op_in = tx->op;
 					dut->a_in = tx->a;
@@ -65,14 +64,12 @@ class AluInMon {
 			this->dut = dut;
 			this->scb = scb;
 		}
-		
 		void monitor(){
 			if (dut->in_valid == 1) {
 				AluInTx *tx = new AluInTx();
 				tx->op = AluInTx::Operation(dut->op_in);
 				tx->a = dut->a_in;
 				tx->b = dut->b_in;
-
 				scb->writeIn(tx);
 			}
 		}
@@ -87,12 +84,10 @@ class AluOutMon {
 			this->dut = dut;
 			this->scb = scb;
 		}
-
 		void monitor() {
 			if (dut->out_valid == 1) {
 				AluOutTx *tx = new AluOutTx();
 				tx->out = dut->out;
-
 				scb->writeOut(tx);
 			}
 		}
@@ -144,14 +139,13 @@ class AluScb {
 		}
 };
 
-
 void dut_reset(Valu *dut, vluint64_t &sim_time){
-	// always_comb begin
-	//     dut.rst = 1'b0;
-	//     if (sim_time >= 3 && sim_time < 6) begin
-	//         dut.rst = 1'b1;
-	//     end
-	// end
+	/* always_comb begin
+			dut.rst = 1'b0;
+			if (sim_time >= 3 && sim_time < 6) begin
+				dut.rst = 1'b1;
+			end
+	 	end */ 
 	dut->rst = 0;
 	if(sim_time > 1 && sim_time < 5){
 		dut->rst = 1;
@@ -162,32 +156,38 @@ void dut_reset(Valu *dut, vluint64_t &sim_time){
 	}
 }
 
-// transaction generator
 AluInTx* rndAluInTx() {
-	if (rand() % 5 == 0) { // 20% chance generating a transaction
+	/* transaction generator tx
+		%5: 20% chance generating a transaction
+			%3: 0 1 2
+			a: 10-20
+			b: 0-5 
+		else: not generating or state-based-opposite time-based sequence */ 
+	if (rand() % 5 == 0) { 
 		AluInTx *tx = new AluInTx();
-		tx->op = AluInTx::Operation(ran() % 3) //0 1 2
-		tx->a = rand() % 11 + 10; // 10-20
-		tx->b = rand() % 6; //0-5
+		tx->op = AluInTx::Operation(ran() % 3) 
+		tx->a = rand() % 11 + 10; 
+		tx->b = rand() % 6; 
 		return tx;
 	} else {
-		return NULL; // not generating or state-based-opposite time-based sequence
+		return NULL; 
 	}
 }
 	
 int main(int argc, char** argv, char** env) {
+	/* 	generate transaction items
+	 		-> driver -> inp/out monitor -> scoreboard
+	 	clk == 1: high 
+		alu: arithmetic logic unit
+		dut: device under test */
 	srand (time(NULL));
 	Verilated::commandArgs(argc, argv);
 	Valu *dut = new Valu;
-
-	Verilated::traceEverOn(true);
+	Verilated:traceEverOn(true);
 	VerilatedVcdC *m_trace = new VerilatedVcdC;
-
 	dut->trace(m_trace, 5);
 	m_trace->open("waveform.vcd");
-
 	AluInTx *tx;
-
 	AluInDrv *drv	= new AluInDrv(dut);
 	AluMon 	 *inMon = new AluInMon(dut, scb);
 	AluOutMon *outMon = new AluOutMon(dut,scb);
@@ -197,7 +197,6 @@ int main(int argc, char** argv, char** env) {
 		dut_reset(dut, sim_time);
 		dut->clk ^= 1;
 		dut->eval();
-
 		if (dut->clk == 1) {
 			if (sim_time >= VERIF_START_TIME) {
 				tx = rndAluInTx();
@@ -206,11 +205,11 @@ int main(int argc, char** argv, char** env) {
 				outMon->monitor();
 			}
 		}
-		
 		m_trace->dump(sim_time);
 		sim_time++;
 	}
-
+	
+	m_trace->close();
 	delete dut;
 	delete inMon;
 	delete outMon;

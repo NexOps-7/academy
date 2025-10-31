@@ -1,9 +1,5 @@
 # verilator_emulator
 
-## error 
-    implicit conversion to enum 'enum{}$unit::operation_t' from 'logic'
-## fix: op_in_r is an operation, not bit?
-        op_in_r <= '0 -> op_in_r <= nop
 ## makefile commands
     make clean
     make waves
@@ -19,6 +15,11 @@
     ls
     sudo apt-get install gtkwave
     gtkwave waveform.vcd
+    
+## error 
+    implicit conversion to enum 'enum{}$unit::operation_t' from 'logic'
+## fix: op_in_r is an operation, not bit?
+        op_in_r <= '0 -> op_in_r <= nop
 ## vim commands
     one more after end of the line:
         `:set ve+=onemore`
