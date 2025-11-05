@@ -111,8 +111,8 @@ class Num a => Fractional a where
             recip (Nada n) = Nada (recip n)
             fromRational r = Nada (fromRational r)
 
-{- cons: operator -> :
-        : data constructor, list val onto the head of another list val 
+{- cons: : x : xs 1 : [2,3] == [1, 2, 3]
+        : data constructor, prepend val onto the head of another list val 
     cons cell: list datatype, data constructor/product types a [a] 
        nesting of multiple cons cells
             ref itself in second arg 
