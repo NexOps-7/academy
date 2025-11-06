@@ -428,8 +428,31 @@ notForce ~x = 1
 notForce undefined
     1
 
-{- add strictness -}
+{- sTake n _ | n <= 0 = Nil
+    sTake 0 _ = Nil
+    add strictness
+        a -> !a
+        List a -> !(List a) !xs -}
 data List a =
     Nil
     | Cons a (List a) deriving Show
-sTake :: 
+sTake :: Int -> List a -> List a
+sTake n _
+    | n <= 0 = Nil
+sTake n Nil = Nil
+sTake n (Cons x xs) = (Cons x (sTake (n-1) xs))
+twoEles = Cons 1 (Cons undefined Nil)
+    == undefined
+oneEle = sTake 1 twoEles
+    == sTake 1 (Cons 1 (Cons undefined Nil))
+    == Cons 1 Nil
+
+| Cons !a (List a) deriving Show 
+threeEles = Cons 2 twoEles
+        == Cons 2 (Cons 1** undefined)
+oneEleT = sTake 1 threeEles
+        == sTake 1 (Cons 2 (Cons 1 (Cons undefined Nil))) 
+        == Cons 2 Nil
+
+| Cons !a !(List a) deriving Show
+oneEle -> undefined
