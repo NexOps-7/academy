@@ -1,21 +1,21 @@
 -- referential transparency: same inp, out same predictable
 -- abstraction: shorter, repeated structures, generic reused
 -- function: relation map, inp out set range, could be same out
-lambda calculus: left accociate
-lambda: head, 
+## lambda calculus: left accociate
+## lambda: head, 
     expressions:
         var
         abstraction-func, head(lamda+var/arg).body 𝜆𝑥.𝑥
-beta β-reduction: apply func by substituing arg
+## beta β-reduction: apply func by substituing arg
     replace bound var(x) with arg, eliminate head
     (𝜆𝑥.𝑥)2 -> 2 identity func
     (𝜆𝑥.𝑥+1) body->(x+1)
     (𝜆𝑥.𝑥)(𝜆𝑦.𝑦) -> 𝜆𝑦.𝑦
     (𝜆𝑥.𝑥)(𝜆𝑦.𝑦)𝑧 -> ((𝜆𝑥.𝑥)(𝜆𝑦.𝑦))𝑧 -> z
-free var: var in the body not bound by the head
+## free var: var in the body not bound by the head
     (𝜆𝑥.𝑥𝑦)z -> zy
-equivalence: 𝜆𝑥𝑦.𝑦𝑥 <=> 𝜆𝑎𝑏.𝑏𝑎
-only accept one arg, multi being shortcuts: 
+## equivalence: 𝜆𝑥𝑦.𝑦𝑥 <=> 𝜆𝑎𝑏.𝑏𝑎
+## only accept one arg, multi being shortcuts: 
     𝜆𝑥.(𝜆𝑦.𝑥𝑦) ->> 𝜆𝑥𝑦.𝑥𝑦 
         apply first arg, bind x, eliminate outer lambda(𝜆𝑥?) 
         have 𝜆𝑦.𝑥𝑦 with x being what the outer lambda bound to(𝜆𝑥(𝜆𝑦).xy->𝜆𝑥𝑦.xy?)
@@ -28,6 +28,6 @@ only accept one arg, multi being shortcuts:
     ->𝜆𝑧.(𝜆𝑛.𝑧)((𝜆𝑝.𝑝)𝑧)->arg ((𝜆𝑝.𝑝)𝑧)->z
     ->𝜆𝑧.(𝜆𝑛.𝑧)𝑧 -> bind n, leftmost reducible 𝜆𝑛.𝑧->z
     ->𝜆𝑧.𝑧 identity func takes z ret z
-evaluation: simplification -> beta normal form
-combinator: 𝜆𝑦.𝑥 y is bound, x is free
-divergence: reduction no ending -> (𝜆𝑥.𝑥𝑥)(𝜆𝑥.𝑥𝑥) omega diverge
+## evaluation: simplification -> beta normal form
+## combinator: 𝜆𝑦.𝑥 y is bound, x is free
+## divergence: reduction no ending -> (𝜆𝑥.𝑥𝑥)(𝜆𝑥.𝑥𝑥) omega diverge

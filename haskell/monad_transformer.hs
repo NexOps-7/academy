@@ -61,6 +61,7 @@ instance (Monad m) => Monad (EitherT e m) where
         case v of
             Left e -> return (Left e)
             Right y -> runEitherT (f y)
+            
 {- lift from: pure IO func ExceptT, ReadT, StateT 
     -> to ActionT
         ExceptT: trans of Either, ReaderT StateT stacked up
